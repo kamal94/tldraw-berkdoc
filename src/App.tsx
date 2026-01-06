@@ -54,6 +54,7 @@ function handleEditorMount(editor: Editor) {
         h: CARD_HEIGHT,
         title: doc.title,
         url: doc.url,
+        source: doc.source as any,
         contributors: getContributors(doc.contributorIds),
         dimensions: doc.dimensions,
       },

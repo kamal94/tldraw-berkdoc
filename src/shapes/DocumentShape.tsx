@@ -1,6 +1,8 @@
 import { HTMLContainer, Rectangle2d, ShapeUtil } from "tldraw";
 import type { TLBaseShape } from "@tldraw/tlschema";
 import { useState } from "react";
+import { SourceIcon, ExternalLinkIcon } from "./SourceIcon";
+import type { DocumentSource } from "./SourceIcon";
 
 // Contributor type for the shape
 export interface Contributor {
@@ -15,6 +17,7 @@ export interface DocumentShapeProps {
   h: number;
   title: string;
   url: string;
+  source?: DocumentSource;
   contributors: Contributor[];
   dimensions: string[];
 }
@@ -210,47 +213,6 @@ function ContributorAvatar({
   );
 }
 
-// External link icon component
-function ExternalLinkIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-      <polyline points="15 3 21 3 21 9" />
-      <line x1="10" y1="14" x2="21" y2="3" />
-    </svg>
-  );
-}
-
-// Document icon component
-function DocumentIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <polyline points="14 2 14 8 20 8" />
-      <line x1="16" y1="13" x2="8" y2="13" />
-      <line x1="16" y1="17" x2="8" y2="17" />
-    </svg>
-  );
-}
-
 // The document shape utility
 export class DocumentShapeUtil extends ShapeUtil<DocumentShape> {
   static override type = "document" as const;
@@ -279,7 +241,7 @@ export class DocumentShapeUtil extends ShapeUtil<DocumentShape> {
   }
 
   component(shape: DocumentShape) {
-    const { w, h, title, url, contributors, dimensions } = shape.props;
+    const { w, h, title, url, source, contributors, dimensions } = shape.props;
 
     const visibleTags = dimensions.slice(0, VISIBLE_TAGS_COUNT);
     const hiddenTagsCount = dimensions.length - VISIBLE_TAGS_COUNT;
@@ -323,8 +285,8 @@ export class DocumentShapeUtil extends ShapeUtil<DocumentShape> {
             <div
               style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, minWidth: 0 }}
             >
-              <span style={{ color: "#6B7280", flexShrink: 0 }}>
-                <DocumentIcon />
+              <span style={{ color: "#6B7280", flexShrink: 0, display: "flex", alignItems: "center" }}>
+                <SourceIcon source={source} />
               </span>
               <span
                 style={{
@@ -426,4 +388,3 @@ export class DocumentShapeUtil extends ShapeUtil<DocumentShape> {
     );
   }
 }
-
