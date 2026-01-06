@@ -1,4 +1,4 @@
-import { Editor, Tldraw } from "tldraw";
+import { createShapeId, Editor, Tldraw } from "tldraw";
 import "tldraw/tldraw.css";
 import { DocumentShapeUtil } from "./shapes/DocumentShape";
 import type { Contributor } from "./shapes/DocumentShape";
@@ -36,10 +36,16 @@ function handleEditorMount(editor: Editor) {
 
   // Create document shapes from sample data
   sampleData.documents.forEach((doc, index) => {
+    const shapeId = createShapeId(doc.id);
+
+    // Only create the shape if it doesn't already exist
+    if (editor.getShape(shapeId)) return;
+
     const row = Math.floor(index / CARDS_PER_ROW);
     const col = index % CARDS_PER_ROW;
 
     editor.createShape({
+      id: shapeId,
       type: "document",
       x: startX + col * (CARD_WIDTH + GAP),
       y: startY + row * (CARD_HEIGHT + GAP),

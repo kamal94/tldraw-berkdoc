@@ -58,9 +58,10 @@ function MoreTagsBadge({
 
   return (
     <span
-      style={{ position: "relative", display: "inline-block" }}
+      style={{ position: "relative", display: "inline-block", pointerEvents: "all" }}
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
+      onPointerDown={(e) => e.stopPropagation()}
     >
       <span
         style={{
@@ -265,7 +266,11 @@ export class DocumentShapeUtil extends ShapeUtil<DocumentShape> {
     };
   }
 
-  getGeometry(shape: DocumentShape) {
+  override canEdit(_shape: DocumentShape) {
+    return false;
+  }
+
+  override getGeometry(shape: DocumentShape) {
     return new Rectangle2d({
       width: shape.props.w,
       height: shape.props.h,
@@ -279,7 +284,7 @@ export class DocumentShapeUtil extends ShapeUtil<DocumentShape> {
     const visibleTags = dimensions.slice(0, VISIBLE_TAGS_COUNT);
     const hiddenTagsCount = dimensions.length - VISIBLE_TAGS_COUNT;
 
-    const handleOpenUrl = (e: React.MouseEvent) => {
+    const handleOpenUrl = (e: React.MouseEvent | React.PointerEvent) => {
       e.stopPropagation();
       if (url) {
         window.open(url, "_blank", "noopener,noreferrer");
@@ -287,7 +292,7 @@ export class DocumentShapeUtil extends ShapeUtil<DocumentShape> {
     };
 
     return (
-      <HTMLContainer>
+      <HTMLContainer style={{ pointerEvents: "all" }}>
         <div
           style={{
             width: w,
@@ -303,7 +308,6 @@ export class DocumentShapeUtil extends ShapeUtil<DocumentShape> {
             fontFamily:
               'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
             boxSizing: "border-box",
-            overflow: "hidden",
           }}
         >
           {/* Header with title and external link */}
@@ -339,7 +343,7 @@ export class DocumentShapeUtil extends ShapeUtil<DocumentShape> {
 
             {url && (
               <button
-                onClick={handleOpenUrl}
+                onPointerDown={handleOpenUrl}
                 style={{
                   background: "none",
                   border: "none",
@@ -352,6 +356,7 @@ export class DocumentShapeUtil extends ShapeUtil<DocumentShape> {
                   justifyContent: "center",
                   transition: "color 0.15s, background-color 0.15s",
                   flexShrink: 0,
+                  pointerEvents: "all",
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.color = "#4F46E5";
