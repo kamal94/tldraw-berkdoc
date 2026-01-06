@@ -1,0 +1,136 @@
+{
+  "users": [
+    {
+      "id": "user1",
+      "name": "Alice Chen",
+      "avatarUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Alice",
+      "color": "#4F46E5"
+    },
+    {
+      "id": "user2",
+      "name": "Marcus Johnson",
+      "avatarUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Marcus",
+      "color": "#059669"
+    },
+    {
+      "id": "user3",
+      "name": "Priya Sharma",
+      "avatarUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Priya",
+      "color": "#DC2626"
+    },
+    {
+      "id": "user4",
+      "name": "James Wilson",
+      "avatarUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=James",
+      "color": "#D97706"
+    },
+    {
+      "id": "user5",
+      "name": "Sofia Rodriguez",
+      "avatarUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Sofia",
+      "color": "#7C3AED"
+    }
+  ],
+  "documents": [
+    {
+      "id": "doc1",
+      "title": "Product Roadmap Q1 2026",
+      "url": "https://notion.so/product-roadmap-q1",
+      "source": "notion",
+      "contributorIds": ["user1", "user2", "user3"],
+      "dimensions": [
+        "strategy",
+        "planning",
+        "product",
+        "quarterly",
+        "okrs",
+        "roadmap",
+        "features",
+        "timeline",
+        "milestones",
+        "engineering",
+        "design",
+        "priorities"
+      ]
+    },
+    {
+      "id": "doc2",
+      "title": "Engineering Architecture RFC",
+      "url": "https://github.com/company/rfcs/arch-v2",
+      "source": "github",
+      "contributorIds": ["user2", "user4"],
+      "dimensions": [
+        "technical",
+        "architecture",
+        "backend",
+        "infrastructure",
+        "scalability",
+        "microservices",
+        "api",
+        "database",
+        "performance",
+        "security"
+      ]
+    },
+    {
+      "id": "doc3",
+      "title": "Brand Guidelines 2026",
+      "url": "https://figma.com/file/brand-guidelines",
+      "source": "figma",
+      "contributorIds": ["user3", "user5"],
+      "dimensions": [
+        "design",
+        "branding",
+        "visual-identity",
+        "typography",
+        "color-palette",
+        "logo",
+        "marketing",
+        "assets",
+        "guidelines",
+        "style"
+      ]
+    },
+    {
+      "id": "doc4",
+      "title": "User Research Findings",
+      "url": "https://docs.google.com/user-research-q4",
+      "source": "google-docs",
+      "contributorIds": ["user1", "user5", "user3", "user2"],
+      "dimensions": [
+        "research",
+        "ux",
+        "user-feedback",
+        "interviews",
+        "personas",
+        "insights",
+        "customer",
+        "analytics",
+        "behavior",
+        "pain-points",
+        "opportunities",
+        "discovery"
+      ]
+    },
+    {
+      "id": "doc5",
+      "title": "API Documentation v3",
+      "url": "https://api.company.com/docs/v3",
+      "source": "box",
+      "contributorIds": ["user2", "user4", "user1"],
+      "dimensions": [
+        "documentation",
+        "api",
+        "technical",
+        "reference",
+        "endpoints",
+        "authentication",
+        "rest",
+        "graphql",
+        "versioning",
+        "developer-experience"
+      ]
+    }
+  ]
+}
+
