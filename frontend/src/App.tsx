@@ -4,7 +4,9 @@ import { DocumentShapeUtil } from "./shapes/DocumentShape";
 import type { Contributor } from "./shapes/DocumentShape";
 import sampleData from "./data/sample-documents.json";
 import { AnimationProvider } from "./contexts/AnimationProvider";
+import { AuthProvider } from "./contexts/AuthProvider";
 import { ConfigPanel } from "./components/ConfigPanel";
+import { SignInButton } from "./components/SignInButton";
 
 // Custom shape utilities to register
 const customShapeUtils = [DocumentShapeUtil];
@@ -69,18 +71,21 @@ function handleEditorMount(editor: Editor) {
 
 function App() {
   return (
-    <AnimationProvider>
-      <div style={{ position: "fixed", inset: 0 }}>
-        <Tldraw
-          shapeUtils={customShapeUtils}
-          onMount={handleEditorMount}
-          options={{
-            maxShapesPerPage: 100 * 1000,
-          }}
-        />
-        <ConfigPanel />
-      </div>
-    </AnimationProvider>
+    <AuthProvider>
+      <AnimationProvider>
+        <div style={{ position: "fixed", inset: 0 }}>
+          <Tldraw
+            shapeUtils={customShapeUtils}
+            onMount={handleEditorMount}
+            options={{
+              maxShapesPerPage: 100 * 1000,
+            }}
+          />
+          <ConfigPanel />
+          <SignInButton />
+        </div>
+      </AnimationProvider>
+    </AuthProvider>
   );
 }
 
