@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { DatabaseService, type UserRow } from '../database/database.service';
@@ -14,6 +14,7 @@ export class AuthService {
     private databaseService: DatabaseService,
   ) {}
 
+  private readonly logger = new Logger(AuthService.name);
   async register(dto: RegisterDto): Promise<AuthResponseDto> {
     // Check if email already exists
     const existingUser = this.databaseService.findUserByEmail(dto.email);
@@ -60,7 +61,10 @@ export class AuthService {
     return this.generateAuthResponse(user);
   }
 
-  async findOrCreateGoogleUser(profile: Profile): Promise<User> {
+  async findOrCreateGoogleUser(
+    profile: Profile,
+    tokens?: { accessToken: string; refreshToken?: string; expiresIn?: number },
+  ): Promise<User> {
     const googleId = profile.id;
     const email = profile.emails?.[0]?.value;
 
@@ -68,10 +72,20 @@ export class AuthService {
       throw new UnauthorizedException('No email provided by Google');
     }
 
+    const tokenExpiry = tokens?.expiresIn ? Date.now() + tokens.expiresIn * 1000 : undefined;
+
     // Check if user exists by Google ID
     const existingGoogleUser = this.databaseService.findUserByProviderId(googleId);
     if (existingGoogleUser) {
-      return this.rowToUser(existingGoogleUser);
+      // Update tokens if provided
+      if (tokens) {
+        this.databaseService.updateUser(existingGoogleUser.id, {
+          googleAccessToken: tokens.accessToken,
+          googleRefreshToken: tokens.refreshToken,
+          googleTokenExpiry: tokenExpiry,
+        });
+      }
+      return this.rowToUser(this.databaseService.findUserByProviderId(googleId)!);
     }
 
     // Check if user exists by email
@@ -82,13 +96,11 @@ export class AuthService {
         providerId: googleId,
         provider: 'google',
         avatarUrl: profile.photos?.[0]?.value,
+        googleAccessToken: tokens?.accessToken,
+        googleRefreshToken: tokens?.refreshToken,
+        googleTokenExpiry: tokenExpiry,
       });
-      return this.rowToUser({
-        ...existingEmailUser,
-        provider_id: googleId,
-        provider: 'google',
-        avatar_url: profile.photos?.[0]?.value || existingEmailUser.avatar_url,
-      });
+      return this.rowToUser(this.databaseService.findUserById(existingEmailUser.id)!);
     }
 
     // Create new user
@@ -99,6 +111,9 @@ export class AuthService {
       avatarUrl: profile.photos?.[0]?.value,
       provider: 'google',
       providerId: googleId,
+      googleAccessToken: tokens?.accessToken,
+      googleRefreshToken: tokens?.refreshToken,
+      googleTokenExpiry: tokenExpiry,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -110,6 +125,9 @@ export class AuthService {
       avatarUrl: user.avatarUrl,
       provider: user.provider,
       providerId: user.providerId,
+      googleAccessToken: user.googleAccessToken,
+      googleRefreshToken: user.googleRefreshToken,
+      googleTokenExpiry: user.googleTokenExpiry,
     });
 
     return user;
@@ -148,6 +166,9 @@ export class AuthService {
       provider: row.provider as 'local' | 'google',
       providerId: row.provider_id || undefined,
       passwordHash: row.password_hash || undefined,
+      googleAccessToken: row.google_access_token || undefined,
+      googleRefreshToken: row.google_refresh_token || undefined,
+      googleTokenExpiry: row.google_token_expiry || undefined,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
     };

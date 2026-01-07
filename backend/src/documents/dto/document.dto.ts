@@ -21,6 +21,14 @@ export class CreateDocumentDto {
   @IsArray()
   @IsString({ each: true })
   dimensions?: string[];
+
+  @IsOptional()
+  @IsString()
+  googleFileId?: string;
+
+  @IsOptional()
+  @IsString()
+  googleModifiedTime?: string;
 }
 
 export class UpdateDocumentDto {
@@ -47,6 +55,14 @@ export class UpdateDocumentDto {
   @IsArray()
   @IsString({ each: true })
   dimensions?: string[];
+
+  @IsOptional()
+  @IsString()
+  googleFileId?: string;
+
+  @IsOptional()
+  @IsString()
+  googleModifiedTime?: string;
 }
 
 export class SearchDocumentsDto {

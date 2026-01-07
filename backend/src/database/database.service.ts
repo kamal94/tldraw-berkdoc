@@ -41,10 +41,25 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         provider TEXT NOT NULL DEFAULT 'local',
         provider_id TEXT,
         password_hash TEXT,
+        google_access_token TEXT,
+        google_refresh_token TEXT,
+        google_token_expiry INTEGER,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )
     `);
+
+    // Ensure new user columns exist
+    const userCols = this.db.query("PRAGMA table_info(users)").all() as { name: string }[];
+    if (!userCols.find(c => c.name === 'google_access_token')) {
+      this.db.exec("ALTER TABLE users ADD COLUMN google_access_token TEXT");
+    }
+    if (!userCols.find(c => c.name === 'google_refresh_token')) {
+      this.db.exec("ALTER TABLE users ADD COLUMN google_refresh_token TEXT");
+    }
+    if (!userCols.find(c => c.name === 'google_token_expiry')) {
+      this.db.exec("ALTER TABLE users ADD COLUMN google_token_expiry INTEGER");
+    }
 
     // Documents table
     this.db.exec(`
@@ -56,17 +71,30 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         source TEXT NOT NULL,
         user_id TEXT NOT NULL,
         dimensions TEXT,
+        google_file_id TEXT UNIQUE,
+        google_modified_time TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY (user_id) REFERENCES users(id)
       )
     `);
 
+    // Ensure new document columns exist
+    const docCols = this.db.query("PRAGMA table_info(documents)").all() as { name: string }[];
+    if (!docCols.find(c => c.name === 'google_file_id')) {
+      this.db.exec("ALTER TABLE documents ADD COLUMN google_file_id TEXT");
+      // Need to add UNIQUE separately in SQLite if desired, but index can handle it
+    }
+    if (!docCols.find(c => c.name === 'google_modified_time')) {
+      this.db.exec("ALTER TABLE documents ADD COLUMN google_modified_time TEXT");
+    }
+
     // Create indexes
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
       CREATE INDEX IF NOT EXISTS idx_users_provider_id ON users(provider_id);
       CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id);
+      CREATE INDEX IF NOT EXISTS idx_documents_google_file_id ON documents(google_file_id);
     `);
 
     this.logger.log('Database tables initialized');
@@ -85,10 +113,21 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     provider: string;
     providerId?: string;
     passwordHash?: string;
+    googleAccessToken?: string;
+    googleRefreshToken?: string;
+    googleTokenExpiry?: number;
   }) {
     const stmt = this.db.prepare(`
-      INSERT INTO users (id, email, name, avatar_url, provider, provider_id, password_hash, created_at, updated_at)
-      VALUES ($id, $email, $name, $avatarUrl, $provider, $providerId, $passwordHash, $createdAt, $updatedAt)
+      INSERT INTO users (
+        id, email, name, avatar_url, provider, provider_id, password_hash,
+        google_access_token, google_refresh_token, google_token_expiry,
+        created_at, updated_at
+      )
+      VALUES (
+        $id, $email, $name, $avatarUrl, $provider, $providerId, $passwordHash,
+        $googleAccessToken, $googleRefreshToken, $googleTokenExpiry,
+        $createdAt, $updatedAt
+      )
     `);
 
     const now = new Date().toISOString();
@@ -100,6 +139,9 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       $provider: user.provider,
       $providerId: user.providerId || null,
       $passwordHash: user.passwordHash || null,
+      $googleAccessToken: user.googleAccessToken || null,
+      $googleRefreshToken: user.googleRefreshToken || null,
+      $googleTokenExpiry: user.googleTokenExpiry || null,
       $createdAt: now,
       $updatedAt: now,
     });
@@ -127,6 +169,9 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       avatarUrl?: string;
       provider?: string;
       providerId?: string;
+      googleAccessToken?: string;
+      googleRefreshToken?: string;
+      googleTokenExpiry?: number;
     },
   ) {
     const now = new Date().toISOString();
@@ -138,6 +183,9 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         avatar_url = COALESCE($avatarUrl, avatar_url),
         provider = COALESCE($provider, provider),
         provider_id = COALESCE($providerId, provider_id),
+        google_access_token = COALESCE($googleAccessToken, google_access_token),
+        google_refresh_token = COALESCE($googleRefreshToken, google_refresh_token),
+        google_token_expiry = COALESCE($googleTokenExpiry, google_token_expiry),
         updated_at = $updatedAt
       WHERE id = $id
     `);
@@ -148,6 +196,9 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       $avatarUrl: updates.avatarUrl ?? null,
       $provider: updates.provider ?? null,
       $providerId: updates.providerId ?? null,
+      $googleAccessToken: updates.googleAccessToken ?? null,
+      $googleRefreshToken: updates.googleRefreshToken ?? null,
+      $googleTokenExpiry: updates.googleTokenExpiry ?? null,
       $updatedAt: now,
     });
   }
@@ -161,10 +212,18 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     source: string;
     userId: string;
     dimensions: string[];
+    googleFileId?: string;
+    googleModifiedTime?: string;
   }) {
     const stmt = this.db.prepare(`
-      INSERT INTO documents (id, title, content, url, source, user_id, dimensions, created_at, updated_at)
-      VALUES ($id, $title, $content, $url, $source, $userId, $dimensions, $createdAt, $updatedAt)
+      INSERT INTO documents (
+        id, title, content, url, source, user_id, dimensions,
+        google_file_id, google_modified_time, created_at, updated_at
+      )
+      VALUES (
+        $id, $title, $content, $url, $source, $userId, $dimensions,
+        $googleFileId, $googleModifiedTime, $createdAt, $updatedAt
+      )
     `);
 
     const now = new Date().toISOString();
@@ -176,6 +235,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       $source: doc.source,
       $userId: doc.userId,
       $dimensions: JSON.stringify(doc.dimensions),
+      $googleFileId: doc.googleFileId || null,
+      $googleModifiedTime: doc.googleModifiedTime || null,
       $createdAt: now,
       $updatedAt: now,
     });
@@ -193,6 +254,11 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return stmt.all(userId) as DocumentRow[];
   }
 
+  findDocumentByGoogleFileId(googleFileId: string): DocumentRow | null {
+    const stmt = this.db.prepare('SELECT * FROM documents WHERE google_file_id = ?');
+    return stmt.get(googleFileId) as DocumentRow | null;
+  }
+
   updateDocument(
     id: string,
     updates: {
@@ -201,6 +267,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       url?: string;
       source?: string;
       dimensions?: string[];
+      googleFileId?: string;
+      googleModifiedTime?: string;
     },
   ) {
     const now = new Date().toISOString();
@@ -213,6 +281,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         url = COALESCE($url, url),
         source = COALESCE($source, source),
         dimensions = COALESCE($dimensions, dimensions),
+        google_file_id = COALESCE($googleFileId, google_file_id),
+        google_modified_time = COALESCE($googleModifiedTime, google_modified_time),
         updated_at = $updatedAt
       WHERE id = $id
     `);
@@ -224,6 +294,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       $url: updates.url ?? null,
       $source: updates.source ?? null,
       $dimensions: updates.dimensions ? JSON.stringify(updates.dimensions) : null,
+      $googleFileId: updates.googleFileId ?? null,
+      $googleModifiedTime: updates.googleModifiedTime ?? null,
       $updatedAt: now,
     });
   }
@@ -231,6 +303,15 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   deleteDocument(id: string) {
     const stmt = this.db.prepare('DELETE FROM documents WHERE id = ?');
     stmt.run(id);
+  }
+
+  deleteDocumentsByUserId(userId: string) {
+    const stmt = this.db.prepare('DELETE FROM documents WHERE user_id = ?');
+    stmt.run(userId);
+  }
+
+  clearAllDocuments() {
+    this.db.exec('DELETE FROM documents');
   }
 }
 
@@ -243,6 +324,9 @@ export interface UserRow {
   provider: string;
   provider_id: string | null;
   password_hash: string | null;
+  google_access_token: string | null;
+  google_refresh_token: string | null;
+  google_token_expiry: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -255,6 +339,8 @@ export interface DocumentRow {
   source: string;
   user_id: string;
   dimensions: string;
+  google_file_id: string | null;
+  google_modified_time: string | null;
   created_at: string;
   updated_at: string;
 }

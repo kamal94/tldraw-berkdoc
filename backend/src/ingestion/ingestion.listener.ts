@@ -13,8 +13,8 @@ export class IngestionListener {
   private readonly logger = new Logger(IngestionListener.name);
 
   // Chunk configuration
-  private readonly chunkSize = 500; // characters per chunk
-  private readonly chunkOverlap = 50; // overlap between chunks
+  private readonly chunkSize = 2000; // characters per chunk
+  private readonly chunkOverlap = 50; // character overlap between chunks
 
   constructor(
     private embeddingService: EmbeddingService,

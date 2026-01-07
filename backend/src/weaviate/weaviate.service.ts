@@ -139,6 +139,32 @@ export class WeaviateService implements OnModuleInit {
     this.logger.debug(`Deleted chunks for document ${documentId}`);
   }
 
+  async deleteUserChunks(userId: string): Promise<void> {
+    if (!this.client) {
+      throw new Error('Weaviate client not connected');
+    }
+
+    const collection = this.client.collections.get(this.collectionName);
+    await collection.data.deleteMany(
+      collection.filter.byProperty('userId').equal(userId),
+    );
+
+    this.logger.debug(`Deleted chunks for user ${userId}`);
+  }
+
+  async clearAllChunks(): Promise<void> {
+    if (!this.client) {
+      throw new Error('Weaviate client not connected');
+    }
+
+    const collection = this.client.collections.get(this.collectionName);
+    await collection.data.deleteMany(
+      collection.filter.byProperty('chunkIndex').greaterThan(-1), // This will match all
+    );
+
+    this.logger.debug('Cleared all chunks from Weaviate');
+  }
+
   async getDocumentChunks(documentId: string, userId: string): Promise<DocumentChunkData[]> {
     if (!this.client) {
       throw new Error('Weaviate client not connected');

@@ -1,13 +1,16 @@
-export interface User {
-  id: string;
-  email: string;
-  name: string;
+export class User {
+  id!: string;
+  email!: string;
+  name!: string;
   avatarUrl?: string;
-  provider: 'local' | 'google';
+  provider!: 'local' | 'google';
   providerId?: string;
   passwordHash?: string;
-  createdAt: Date;
-  updatedAt: Date;
+  googleAccessToken?: string;
+  googleRefreshToken?: string;
+  googleTokenExpiry?: number;
+  createdAt!: Date;
+  updatedAt!: Date;
 }
 
 export interface JwtPayload {

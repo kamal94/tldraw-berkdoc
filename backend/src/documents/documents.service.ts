@@ -37,6 +37,8 @@ export class DocumentsService {
       source: document.source,
       userId: document.userId,
       dimensions: document.dimensions,
+      googleFileId: dto.googleFileId,
+      googleModifiedTime: dto.googleModifiedTime,
     });
 
     // Emit event for ingestion pipeline
@@ -80,6 +82,8 @@ export class DocumentsService {
       url: dto.url,
       source: dto.source,
       dimensions: dto.dimensions,
+      googleFileId: dto.googleFileId,
+      googleModifiedTime: dto.googleModifiedTime,
     });
 
     // Get updated document

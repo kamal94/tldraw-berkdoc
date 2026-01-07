@@ -43,6 +43,7 @@ export function DocumentIcon() {
 export type DocumentSource = 
   | "google-docs" 
   | "google-sheets" 
+  | "google-drive"
   | "notion" 
   | "word" 
   | "excel" 
@@ -57,6 +58,7 @@ interface SourceIconProps {
 
 export function SourceIcon({ source }: SourceIconProps) {
   switch (source) {
+    case "google-drive":
     case "google-docs":
       return (
         <svg width="16" height="16" viewBox="0 0 24 24">
