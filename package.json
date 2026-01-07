@@ -1,0 +1,13 @@
+{
+  "name": "tldraw-berkdoc-root",
+  "private": true,
+  "scripts": {
+    "prepare": "husky",
+    "lint:backend": "cd backend && bun run lint",
+    "lint:frontend": "cd frontend && bun run lint",
+    "lint": "bun run lint:backend && bun run lint:frontend"
+  },
+  "devDependencies": {
+    "husky": "^9.0.11"
+  }
+}

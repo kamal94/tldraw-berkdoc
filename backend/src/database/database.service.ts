@@ -1,5 +1,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { Database } from 'bun:sqlite';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class DatabaseService implements OnModuleInit, OnModuleDestroy {
@@ -18,8 +20,6 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
   private connect() {
     // Ensure data directory exists
-    const fs = require('fs');
-    const path = require('path');
     const dir = path.dirname(this.dbPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
