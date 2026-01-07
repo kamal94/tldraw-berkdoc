@@ -1,8 +1,10 @@
-import { createShapeId, Editor, Tldraw } from "tldraw";
+import { createShapeId, type Editor, Tldraw } from "tldraw";
 import "tldraw/tldraw.css";
 import { DocumentShapeUtil } from "./shapes/DocumentShape";
 import type { Contributor } from "./shapes/DocumentShape";
 import sampleData from "./data/sample-documents.json";
+import { AnimationProvider } from "./contexts/AnimationProvider";
+import { ConfigPanel } from "./components/ConfigPanel";
 
 // Custom shape utilities to register
 const customShapeUtils = [DocumentShapeUtil];
@@ -54,7 +56,7 @@ function handleEditorMount(editor: Editor) {
         h: CARD_HEIGHT,
         title: doc.title,
         url: doc.url,
-        source: doc.source as any,
+        source: doc.source,
         contributors: getContributors(doc.contributorIds),
         dimensions: doc.dimensions,
       },
@@ -67,15 +69,18 @@ function handleEditorMount(editor: Editor) {
 
 function App() {
   return (
-    <div style={{ position: "fixed", inset: 0 }}>
-      <Tldraw
-        shapeUtils={customShapeUtils}
-        onMount={handleEditorMount}
-        options={{
-          maxShapesPerPage: 100 * 1000,
-        }}
-      />
-    </div>
+    <AnimationProvider>
+      <div style={{ position: "fixed", inset: 0 }}>
+        <Tldraw
+          shapeUtils={customShapeUtils}
+          onMount={handleEditorMount}
+          options={{
+            maxShapesPerPage: 100 * 1000,
+          }}
+        />
+        <ConfigPanel />
+      </div>
+    </AnimationProvider>
   );
 }
 
