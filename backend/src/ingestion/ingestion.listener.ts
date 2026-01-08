@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { EmbeddingService } from '../embedding/embedding.service';
 import { WeaviateService, type DocumentChunkData } from '../weaviate/weaviate.service';
+import { LlmService } from '../llm/llm.service';
+import { DatabaseService } from '../database/database.service';
 import {
   DocumentCreatedEvent,
   DocumentUpdatedEvent,
@@ -19,6 +21,8 @@ export class IngestionListener {
   constructor(
     private embeddingService: EmbeddingService,
     private weaviateService: WeaviateService,
+    private llmService: LlmService,
+    private databaseService: DatabaseService,
   ) {}
 
   @OnEvent('document.created')
@@ -58,6 +62,19 @@ export class IngestionListener {
     event: DocumentCreatedEvent | DocumentUpdatedEvent,
   ): Promise<void> {
     try {
+      // Generate summary and tags using LLM (single HTTP call)
+      this.logger.log(`Generating metadata for document ${event.id}...`);
+      const { summary, tags } = await this.llmService.analyze(event.content);
+
+      this.logger.log(`Generated summary for document ${event.id}: ${summary}`);
+      this.logger.log(`Generated tags for document ${event.id}: ${tags.join(', ')}`);
+
+      // Update document in database with LLM-generated metadata
+      this.databaseService.updateDocument(event.id, {
+        summary,
+        tags,
+      });
+
       // Chunk the document
       const chunks = this.chunkDocument(event.content);
       this.logger.log(`Document ${event.id} split into ${chunks.length} chunks`);

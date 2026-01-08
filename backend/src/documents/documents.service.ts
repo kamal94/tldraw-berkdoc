@@ -24,7 +24,7 @@ export class DocumentsService {
       url: dto.url,
       source: dto.source,
       userId,
-      dimensions: dto.dimensions || [],
+      tags: dto.tags || [],
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -36,7 +36,7 @@ export class DocumentsService {
       url: document.url,
       source: document.source,
       userId: document.userId,
-      dimensions: document.dimensions,
+      tags: document.tags,
       googleFileId: dto.googleFileId,
       googleModifiedTime: dto.googleModifiedTime,
     });
@@ -81,7 +81,7 @@ export class DocumentsService {
       content: dto.content,
       url: dto.url,
       source: dto.source,
-      dimensions: dto.dimensions,
+      tags: dto.tags,
       googleFileId: dto.googleFileId,
       googleModifiedTime: dto.googleModifiedTime,
     });
@@ -125,7 +125,8 @@ export class DocumentsService {
       url: row.url || undefined,
       source: row.source,
       userId: row.user_id,
-      dimensions: JSON.parse(row.dimensions || '[]'),
+      tags: row.tags ? JSON.parse(row.tags) : [],
+      summary: row.summary || undefined,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
     };

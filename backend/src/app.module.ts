@@ -8,6 +8,7 @@ import { WeaviateModule } from './weaviate/weaviate.module';
 import { EmbeddingModule } from './embedding/embedding.module';
 import { IngestionModule } from './ingestion/ingestion.module';
 import { GoogleDriveModule } from './google-drive/google-drive.module';
+import { LlmModule } from './llm/llm.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { GoogleDriveModule } from './google-drive/google-drive.module';
     EmbeddingModule,
     IngestionModule,
     GoogleDriveModule,
+    LlmModule,
   ],
 })
 export class AppModule {}

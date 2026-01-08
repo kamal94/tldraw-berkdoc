@@ -5,7 +5,8 @@ export interface Document {
   url?: string;
   source: string;
   userId: string;
-  dimensions: string[];
+  tags: string[];
+  summary?: string;
   createdAt: Date;
   updatedAt: Date;
 }

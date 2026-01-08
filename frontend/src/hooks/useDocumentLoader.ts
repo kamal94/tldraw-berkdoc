@@ -63,7 +63,8 @@ export function useDocumentLoader(isAuthenticated: boolean, userId?: string) {
                   url: doc.url || "",
                   source: doc.source as DocumentSource,
                   contributors: [],
-                  dimensions: doc.dimensions || [],
+                  tags: doc.tags || [],
+                  summary: doc.summary || "",
                 },
               });
             });
@@ -90,7 +91,8 @@ export function useDocumentLoader(isAuthenticated: boolean, userId?: string) {
                 url: doc.url,
                 source: doc.source as DocumentSource,
                 contributors: getContributors(doc.contributorIds),
-                dimensions: doc.dimensions,
+                tags: doc.tags || [],
+                summary: "",
               },
             });
           });

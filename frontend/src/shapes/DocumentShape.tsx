@@ -18,7 +18,8 @@ export interface DocumentShapeProps {
   url: string;
   source?: DocumentSource;
   contributors: Contributor[];
-  dimensions: string[];
+  tags: string[];
+  summary?: string;
 }
 
 // The document shape type
@@ -31,11 +32,12 @@ export class DocumentShapeUtil extends ShapeUtil<DocumentShape> {
   getDefaultProps(): DocumentShapeProps {
     return {
       w: 300,
-      h: 140,
+      h: 180,
       title: "Untitled Document",
       url: "",
       contributors: [],
-      dimensions: [],
+      tags: [],
+      summary: "",
     };
   }
 

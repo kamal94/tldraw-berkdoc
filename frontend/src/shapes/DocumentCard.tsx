@@ -197,7 +197,7 @@ function ContributorAvatar({
 }
 
 export function DocumentCard({ shape }: { shape: DocumentShape }) {
-  const { w, h, title, url, source, contributors, dimensions } = shape.props;
+  const { w, h, title, url, source, contributors, tags, summary } = shape.props;
   const { isAddLifeEnabled } = useAnimation();
 
   // Use useState to get stable random values for animation
@@ -217,8 +217,8 @@ export function DocumentCard({ shape }: { shape: DocumentShape }) {
     };
   }, [animationParams]);
 
-  const visibleTags = dimensions.slice(0, VISIBLE_TAGS_COUNT);
-  const hiddenTagsCount = dimensions.length - VISIBLE_TAGS_COUNT;
+  const visibleTags = tags.slice(0, VISIBLE_TAGS_COUNT);
+  const hiddenTagsCount = tags.length - VISIBLE_TAGS_COUNT;
 
   const handleOpenUrl = (e: React.MouseEvent | React.PointerEvent) => {
     e.stopPropagation();
@@ -324,8 +324,28 @@ export function DocumentCard({ shape }: { shape: DocumentShape }) {
           )}
         </div>
 
+        {/* Summary section */}
+        {summary && (
+          <div
+            style={{
+              fontSize: "12px",
+              lineHeight: "1.4",
+              color: "#4B5563",
+              marginBottom: "12px",
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+              fontStyle: "italic",
+            }}
+            title={summary}
+          >
+            "{summary}"
+          </div>
+        )}
+
         {/* Tags section */}
-        {dimensions.length > 0 && (
+        {tags.length > 0 && (
           <div
             style={{
               display: "flex",
@@ -338,7 +358,7 @@ export function DocumentCard({ shape }: { shape: DocumentShape }) {
               <TagPill key={tag} tag={tag} />
             ))}
             {hiddenTagsCount > 0 && (
-              <MoreTagsBadge count={hiddenTagsCount} allTags={dimensions} />
+              <MoreTagsBadge count={hiddenTagsCount} allTags={tags} />
             )}
           </div>
         )}

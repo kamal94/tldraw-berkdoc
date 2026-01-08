@@ -20,7 +20,7 @@ export class CreateDocumentDto {
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  dimensions?: string[];
+  tags?: string[];
 
   @IsOptional()
   @IsString()
@@ -54,7 +54,7 @@ export class UpdateDocumentDto {
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  dimensions?: string[];
+  tags?: string[];
 
   @IsOptional()
   @IsString()
@@ -80,7 +80,8 @@ export class DocumentResponseDto {
   content!: string;
   url?: string;
   source!: string;
-  dimensions!: string[];
+  tags!: string[];
+  summary?: string;
   createdAt!: Date;
   updatedAt!: Date;
 }

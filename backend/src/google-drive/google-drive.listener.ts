@@ -37,6 +37,7 @@ export class GoogleDriveSyncListener {
             name: file.name,
             mimeType: file.mimeType,
             modifiedTime: file.modifiedTime,
+            webViewLink: file.webViewLink || undefined,
           }),
         );
       }
@@ -71,6 +72,7 @@ export class GoogleDriveSyncListener {
         await this.documentsService.update(userId, existingDoc.id, {
           title: file.name,
           content,
+          url: file.webViewLink,
           googleModifiedTime: file.modifiedTime,
         });
       } else {
@@ -78,6 +80,7 @@ export class GoogleDriveSyncListener {
         await this.documentsService.create(userId, {
           title: file.name,
           content,
+          url: file.webViewLink,
           source: 'google-drive',
           googleFileId: file.id,
           googleModifiedTime: file.modifiedTime,

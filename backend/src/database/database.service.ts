@@ -70,9 +70,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         url TEXT,
         source TEXT NOT NULL,
         user_id TEXT NOT NULL,
-        dimensions TEXT,
+        tags TEXT,
         google_file_id TEXT UNIQUE,
         google_modified_time TEXT,
+        summary TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY (user_id) REFERENCES users(id)
@@ -87,6 +88,19 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     }
     if (!docCols.find(c => c.name === 'google_modified_time')) {
       this.db.exec("ALTER TABLE documents ADD COLUMN google_modified_time TEXT");
+    }
+    if (!docCols.find(c => c.name === 'summary')) {
+      this.db.exec("ALTER TABLE documents ADD COLUMN summary TEXT");
+    }
+    if (!docCols.find(c => c.name === 'tags')) {
+      this.db.exec("ALTER TABLE documents ADD COLUMN tags TEXT");
+    }
+    
+    // Migrate dimensions to tags if dimensions column exists
+    if (docCols.find(c => c.name === 'dimensions')) {
+      this.logger.log('Migrating dimensions to tags...');
+      this.db.exec("UPDATE documents SET tags = dimensions WHERE tags IS NULL AND dimensions IS NOT NULL");
+      // Note: We keep the dimensions column for backward compatibility but stop using it
     }
 
     // Create indexes
@@ -211,18 +225,19 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     url?: string;
     source: string;
     userId: string;
-    dimensions: string[];
+    tags?: string[];
     googleFileId?: string;
     googleModifiedTime?: string;
+    summary?: string;
   }) {
     const stmt = this.db.prepare(`
       INSERT INTO documents (
-        id, title, content, url, source, user_id, dimensions,
-        google_file_id, google_modified_time, created_at, updated_at
+        id, title, content, url, source, user_id, tags,
+        google_file_id, google_modified_time, summary, created_at, updated_at
       )
       VALUES (
-        $id, $title, $content, $url, $source, $userId, $dimensions,
-        $googleFileId, $googleModifiedTime, $createdAt, $updatedAt
+        $id, $title, $content, $url, $source, $userId, $tags,
+        $googleFileId, $googleModifiedTime, $summary, $createdAt, $updatedAt
       )
     `);
 
@@ -234,9 +249,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       $url: doc.url || null,
       $source: doc.source,
       $userId: doc.userId,
-      $dimensions: JSON.stringify(doc.dimensions),
+      $tags: doc.tags ? JSON.stringify(doc.tags) : null,
       $googleFileId: doc.googleFileId || null,
       $googleModifiedTime: doc.googleModifiedTime || null,
+      $summary: doc.summary || null,
       $createdAt: now,
       $updatedAt: now,
     });
@@ -266,9 +282,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       content?: string;
       url?: string;
       source?: string;
-      dimensions?: string[];
+      tags?: string[];
       googleFileId?: string;
       googleModifiedTime?: string;
+      summary?: string;
     },
   ) {
     const now = new Date().toISOString();
@@ -280,9 +297,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         content = COALESCE($content, content),
         url = COALESCE($url, url),
         source = COALESCE($source, source),
-        dimensions = COALESCE($dimensions, dimensions),
+        tags = COALESCE($tags, tags),
         google_file_id = COALESCE($googleFileId, google_file_id),
         google_modified_time = COALESCE($googleModifiedTime, google_modified_time),
+        summary = COALESCE($summary, summary),
         updated_at = $updatedAt
       WHERE id = $id
     `);
@@ -293,9 +311,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       $content: updates.content ?? null,
       $url: updates.url ?? null,
       $source: updates.source ?? null,
-      $dimensions: updates.dimensions ? JSON.stringify(updates.dimensions) : null,
+      $tags: updates.tags ? JSON.stringify(updates.tags) : null,
       $googleFileId: updates.googleFileId ?? null,
       $googleModifiedTime: updates.googleModifiedTime ?? null,
+      $summary: updates.summary ?? null,
       $updatedAt: now,
     });
   }
@@ -338,9 +357,10 @@ export interface DocumentRow {
   url: string | null;
   source: string;
   user_id: string;
-  dimensions: string;
+  tags: string | null;
   google_file_id: string | null;
   google_modified_time: string | null;
+  summary: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -10,6 +10,7 @@ export class GoogleDriveFileDiscoveredEvent {
       name: string;
       mimeType: string;
       modifiedTime: string;
+      webViewLink?: string;
     },
   ) {}
 }

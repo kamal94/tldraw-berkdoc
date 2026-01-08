@@ -55,7 +55,7 @@ export class GoogleDriveService {
     
     const response = await drive.files.list({
       q,
-      fields: 'files(id, name, mimeType, modifiedTime)',
+      fields: 'files(id, name, mimeType, modifiedTime, webViewLink)',
       pageSize: 100, // We could implement pagination if needed
     });
 
