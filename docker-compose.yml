@@ -1,5 +1,5 @@
 # Root docker-compose file for local development
-# This orchestrates all services including the backend, frontend, weaviate, and llm-service
+# This orchestrates all services including the backend, frontend, and weaviate
 services:
   weaviate:
     image: semitechnologies/weaviate:1.35.2
@@ -20,48 +20,3 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  # Ollama service commented out - using local Ollama instance instead (faster with GPU)
-  # Uncomment if you want to use Docker-based Ollama instead
-  # ollama:
-  #   image: ollama/ollama:latest
-  #   ports:
-  #     - "11434:11434"
-  #   environment:
-  #     OLLAMA_HOST: "0.0.0.0:11434"
-  #   volumes:
-  #     - ./docker_volumes/ollama:/root/.ollama
-  #   restart: unless-stopped
-  #   healthcheck:
-  #     test: ["CMD", "ollama", "list"]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 3
-  #     start_period: 30s
-
-  llm-service:
-    build:
-      context: ./llm-service
-      dockerfile: Dockerfile
-    ports:
-      - "3001:3001"
-    environment:
-      PORT: 3001
-      MODEL_BACKEND: ${MODEL_BACKEND:-ollama}
-      # Use host.docker.internal to access local Ollama instance on Mac/Windows
-      # On Linux, you might need to use the host's IP address or add extra_hosts
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma3:4b}
-    volumes:
-      # Mount source code for hot reloading
-      - ./llm-service/src:/app/src
-      - ./llm-service/scripts:/app/scripts
-      - ./llm-service/package.json:/app/package.json
-    command: bun run dev
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--spider", "http://localhost:3001/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s

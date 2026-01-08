@@ -1,75 +1,52 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { buildSummaryPrompt, buildTagsPrompt } from './prompts.js';
-import { parseSummary, parseTags } from './parsers.js';
-
-interface OpenAICompletionResponse {
-  id: string;
-  object: string;
-  created: number;
-  model: string;
-  choices: Array<{
-    text: string;
-    index: number;
-    logprobs: null;
-    finish_reason: string;
-  }>;
-  usage: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-  };
-}
-
-interface OpenAIErrorResponse {
-  error: {
-    message: string;
-    type: string;
-  };
-}
+import { Injectable, Logger } from "@nestjs/common";
+import { buildSummaryPrompt, buildTagsPrompt } from "./prompts.js";
+import { parseSummary, parseTags } from "./parsers.js";
 
 @Injectable()
 export class LlmService {
   private readonly logger = new Logger(LlmService.name);
-  private readonly llmServiceUrl = process.env.LLM_SERVICE_URL || 'http://localhost:3001';
+  private readonly ollamaBaseUrl =
+    process.env.OLLAMA_BASE_URL || "http://localhost:11434";
+  private readonly ollamaModel = process.env.OLLAMA_MODEL || "gemma3:1b";
 
   /**
-   * Call the OpenAI-compatible completions endpoint
+   * Call Ollama API directly to generate text
    */
   private async callCompletions(
     prompt: string,
     options?: {
       max_tokens?: number;
       temperature?: number;
-    },
+    }
   ): Promise<string> {
     try {
-      const response = await fetch(`${this.llmServiceUrl}/v1/completions`, {
-        method: 'POST',
+      const response = await fetch(`${this.ollamaBaseUrl}/api/generate`, {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          model: this.ollamaModel,
           prompt,
-          max_tokens: options?.max_tokens || 200,
-          temperature: options?.temperature ?? 0.7,
+          options: {
+            num_predict: options?.max_tokens,
+            temperature: options?.temperature ?? 0.7,
+          },
+          stream: false,
         }),
       });
 
       if (!response.ok) {
-        const errorData: OpenAIErrorResponse = await response.json().catch(() => ({
-          error: { message: `HTTP ${response.status}`, type: 'http_error' },
-        }));
-        throw new Error(
-          `LLM service error: ${errorData.error?.message || response.statusText}`,
-        );
+        const errorText = await response.text();
+        throw new Error(`Ollama API error: ${response.status} - ${errorText}`);
       }
 
-      const data: OpenAICompletionResponse = await response.json();
-      const text = data.choices[0]?.text || '';
-      return text;
+      const data = await response.json();
+      return data.response?.trim() || "";
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.error('Failed to call LLM service completions endpoint', errorMessage);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error("Failed to call Ollama API", errorMessage);
       throw error;
     }
   }
@@ -86,11 +63,22 @@ export class LlmService {
         temperature: 0.5,
       });
       const elapsed = Date.now() - start;
-      this.logger.log(`generateSummary callCompletions took ${elapsed}ms`);
+      this.logger.log(`generateSummary took ${elapsed}ms`);
+
+      // Store prompt and response to filesystem for later test data use
+      await this.storeCallAndResponse("summary", {
+        request: {
+          prompt,
+          max_tokens: 80,
+          temperature: 0.5,
+        },
+        response,
+      });
+
       return parseSummary(response);
     } catch (error) {
-      this.logger.error('Failed to generate summary via LLM service', error);
-      return '';
+      this.logger.error("Failed to generate summary via Ollama", error);
+      return "";
     }
   }
 
@@ -101,15 +89,24 @@ export class LlmService {
     try {
       const prompt = buildTagsPrompt(content);
       const start = Date.now();
+
       const response = await this.callCompletions(prompt, {
         max_tokens: 100,
         temperature: 0.3,
       });
       const elapsed = Date.now() - start;
-      this.logger.log(`generateTags callCompletions took ${elapsed}ms`);
+      this.logger.log(`generateTags took ${elapsed}ms`);
+      await this.storeCallAndResponse("tags", {
+        request: {
+          prompt,
+          max_tokens: 100,
+          temperature: 0.3,
+        },
+        response,
+      });
       return parseTags(response);
     } catch (error) {
-      this.logger.error('Failed to generate tags via LLM service', error);
+      this.logger.error("Failed to generate tags via Ollama", error);
       return [];
     }
   }
@@ -123,7 +120,9 @@ export class LlmService {
       const MAX_CONTENT_LENGTH = 1_000_000; // Approximately 1MB in characters, as JS strings are UTF-16, exact bytes may vary
       let truncatedContent = content;
       if (content.length > MAX_CONTENT_LENGTH) {
-        this.logger.warn(`Content exceeded ${MAX_CONTENT_LENGTH} characters, truncating for analyze.`);
+        this.logger.warn(
+          `Content exceeded ${MAX_CONTENT_LENGTH} characters, truncating for analyze.`
+        );
         truncatedContent = content.slice(0, MAX_CONTENT_LENGTH);
       }
       // Generate both in parallel
@@ -134,26 +133,31 @@ export class LlmService {
 
       return { summary, tags };
     } catch (error) {
-      this.logger.error('Failed to analyze content via LLM service', error);
-      return { summary: '', tags: [] };
+      this.logger.error("Failed to analyze content via Ollama", error);
+      return { summary: "", tags: [] };
     }
   }
 
-  /**
-   * Check if the LLM service is ready
-   */
-  async isReady(): Promise<boolean> {
+  async storeCallAndResponse(
+    type: "summary" | "tags",
+    data: {
+      request: { prompt: string; max_tokens: number; temperature: number };
+      response: string;
+    }
+  ): Promise<void> {
     try {
-      const response = await fetch(`${this.llmServiceUrl}/ready`);
-      if (!response.ok) {
-        return false;
+      const fs = await import("fs");
+      const path = await import("path");
+      const testDataDir = path.resolve(process.cwd(), "ollama-test-data");
+      if (!fs.existsSync(testDataDir)) {
+        fs.mkdirSync(testDataDir, { recursive: true });
       }
-      const data = await response.json();
-      return data.ready === true;
-    } catch {
-      this.logger.warn('LLM service is not reachable');
-      return false;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const filename = `${type}-${timestamp}.json`;
+      const filePath = path.join(testDataDir, filename);
+      fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+    } catch (err) {
+      this.logger.warn(`Failed to write ${type} test data: ${err}`);
     }
   }
 }
-

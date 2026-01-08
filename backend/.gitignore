@@ -1,6 +1,8 @@
 # dependencies (bun install)
 node_modules
 
+ollama-test-data/
+
 # output
 out
 dist
