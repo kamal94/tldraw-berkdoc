@@ -143,6 +143,41 @@ bun x tsc --noEmit
 bun run lint
 ```
 
+## Document Clustering
+
+The backend includes a Python script for HDBSCAN clustering of user document collections.
+
+### Setup
+
+Install Python dependencies using `uv`:
+
+```bash
+cd backend
+uv pip install -r requirements-clustering.txt
+```
+
+### Usage
+
+```bash
+# Basic usage (uses default min_cluster_size=5, min_samples=5)
+python scripts/cluster_documents.py <user_id>
+
+# Custom parameters
+python scripts/cluster_documents.py <user_id> --min-cluster-size 10 --min-samples 10
+
+# With SQLite database access for additional metadata
+python scripts/cluster_documents.py <user_id> --db-path data/berkdoc.db
+
+# Save results to file
+python scripts/cluster_documents.py <user_id> --output results.json
+```
+
+The script:
+- Fetches all document chunks from Weaviate for the specified user
+- Aggregates chunk embeddings per document (mean pooling)
+- Performs HDBSCAN clustering on document-level embeddings
+- Outputs cluster assignments and statistics as JSON
+
 ## Production Notes
 
 - Replace in-memory user/document stores with a real database (PostgreSQL, MongoDB, etc.)
