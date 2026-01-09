@@ -23,24 +23,41 @@ export class GoogleDriveSyncListener {
   async handleSyncRequested(event: GoogleDriveSyncRequestedEvent) {
     this.logger.log(`Sync requested for user ${event.userId}`);
     try {
-      const files = await this.googleDriveService.listFiles(event.userId);
-      this.logger.log(`Discovered ${files.length} files for user ${event.userId}`);
+      let pageToken: string | undefined = undefined;
+      let pageCount = 0;
+      let totalFilesDiscovered = 0;
 
-      // only filter the first 10 for now as we test
-      for (const file of files.slice(0, 10)) {
-        if (!file.id || !file.name || !file.mimeType || !file.modifiedTime) continue;
+      do {
+        pageCount++;
+        this.logger.log(`Fetching page ${pageCount} of Google Drive files for user ${event.userId}${pageToken ? ` (continuing from previous page)` : ''}`);
         
-        this.eventEmitter.emit(
-          'google.drive.file.discovered',
-          new GoogleDriveFileDiscoveredEvent(event.userId, {
-            id: file.id,
-            name: file.name,
-            mimeType: file.mimeType,
-            modifiedTime: file.modifiedTime,
-            webViewLink: file.webViewLink || undefined,
-          }),
+        const { files, nextPageToken } = await this.googleDriveService.listFilesPage(
+          event.userId,
+          pageToken,
         );
-      }
+
+        this.logger.log(`Fetched ${files.length} files on page ${pageCount}`);
+
+        for (const file of files) {
+          if (!file.id || !file.name || !file.mimeType || !file.modifiedTime) continue;
+          
+          this.eventEmitter.emit(
+            'google.drive.file.discovered',
+            new GoogleDriveFileDiscoveredEvent(event.userId, {
+              id: file.id,
+              name: file.name,
+              mimeType: file.mimeType,
+              modifiedTime: file.modifiedTime,
+              webViewLink: file.webViewLink || undefined,
+            }),
+          );
+          totalFilesDiscovered++;
+        }
+
+        pageToken = nextPageToken;
+      } while (pageToken);
+
+      this.logger.log(`Completed pagination: discovered ${totalFilesDiscovered} total files across ${pageCount} page(s) for user ${event.userId}`);
     } catch (error) {
       this.logger.error(`Failed to list files for user ${event.userId}`, error);
     }

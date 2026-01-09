@@ -8,7 +8,7 @@ export class LlmService {
   private readonly logger = new Logger(LlmService.name);
   private readonly ollamaBaseUrl =
     process.env.OLLAMA_BASE_URL || "http://localhost:11434";
-  private readonly ollamaModel = process.env.OLLAMA_MODEL || "gemma3:4b";
+  private readonly ollamaModel = process.env.OLLAMA_MODEL || "gemma3:12b";
 
   /**
    * Call Ollama API directly to generate text

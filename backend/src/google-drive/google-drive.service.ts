@@ -11,7 +11,7 @@ export class GoogleDriveService {
   constructor(
     private configService: ConfigService,
     private databaseService: DatabaseService,
-  ) {}
+  ) { }
 
   async getDriveClient(userId: string) {
     const user = this.databaseService.findUserById(userId);
@@ -47,19 +47,23 @@ export class GoogleDriveService {
     return google.drive({ version: 'v3', auth: oauth2Client });
   }
 
-  async listFiles(userId: string) {
+  async listFilesPage(userId: string, pageToken?: string) {
     const drive = await this.getDriveClient(userId);
-    
-    // Query for PDFs and Google Docs
+
+    // Query for PDFs and Google Docs only (exclude sheets, slides, etc.)
     const q = "(mimeType = 'application/pdf' or mimeType = 'application/vnd.google-apps.document') and trashed = false";
-    
+
     const response = await drive.files.list({
       q,
-      fields: 'files(id, name, mimeType, modifiedTime, webViewLink)',
-      pageSize: 100, // We could implement pagination if needed
-    });
+      fields: 'nextPageToken, files(id, name, mimeType, modifiedTime, webViewLink)',
+      pageSize: 100,
+      pageToken,
+    }) as { data: { files?: Array<{ id?: string; name?: string; mimeType?: string; modifiedTime?: string; webViewLink?: string }>; nextPageToken?: string } };
 
-    return response.data.files || [];
+    return {
+      files: response.data.files || [],
+      nextPageToken: response.data.nextPageToken || undefined,
+    };
   }
 
   async downloadAndExtractText(userId: string, fileId: string, mimeType: string): Promise<string> {
@@ -78,7 +82,7 @@ export class GoogleDriveService {
         { fileId, alt: 'media' },
         { responseType: 'arraybuffer' },
       );
-      
+
       const buffer = Buffer.from(response.data as ArrayBuffer);
       const parser = new PDFParse({ data: buffer });
       try {

@@ -25,17 +25,17 @@ export class IngestionListener {
     private databaseService: DatabaseService,
   ) {}
 
-  @OnEvent('document.created')
-  async processTags(event: DocumentCreatedEvent) {
-    this.logger.log(`Processing tags for document: ${event.id}`);
-    await this.extractTags(event);
-  }
+  // @OnEvent('document.created')
+  // async processTags(event: DocumentCreatedEvent) {
+  //   this.logger.log(`Processing tags for document: ${event.id}`);
+  //   await this.extractTags(event);
+  // }
 
-  @OnEvent('document.created')
-  async processSummary(event: DocumentCreatedEvent) {
-    this.logger.log(`Processing summary for document: ${event.id}`);
-    await this.generateSummary(event);
-  }
+  // @OnEvent('document.created')
+  // async processSummary(event: DocumentCreatedEvent) {
+  //   this.logger.log(`Processing summary for document: ${event.id}`);
+  //   await this.generateSummary(event);
+  // }
 
   @OnEvent('document.created')
   async processEmbeddings(event: DocumentCreatedEvent) {
