@@ -38,7 +38,8 @@
       "url": "https://notion.so/product-roadmap-q1",
       "source": "notion",
       "contributorIds": ["user1", "user2", "user3"],
-      "dimensions": [
+      "summary": "This is a summary of the product roadmap for Q1 2026",
+      "tags": [
         "strategy",
         "planning",
         "product",
@@ -59,7 +60,8 @@
       "url": "https://github.com/company/rfcs/arch-v2",
       "source": "github",
       "contributorIds": ["user2", "user4"],
-      "dimensions": [
+      "summary": "This is a summary of the engineering architecture RFC",
+      "tags": [
         "technical",
         "architecture",
         "backend",
@@ -78,7 +80,8 @@
       "url": "https://figma.com/file/brand-guidelines",
       "source": "figma",
       "contributorIds": ["user3", "user5"],
-      "dimensions": [
+      "summary": "This is a summary of the brand guidelines for 2026",
+      "tags": [
         "design",
         "branding",
         "visual-identity",
@@ -97,7 +100,8 @@
       "url": "https://docs.google.com/user-research-q4",
       "source": "google-docs",
       "contributorIds": ["user1", "user5", "user3", "user2"],
-      "dimensions": [
+      "summary": "This is a summary of the user research findings",
+      "tags": [
         "research",
         "ux",
         "user-feedback",
@@ -118,7 +122,8 @@
       "url": "https://api.company.com/docs/v3",
       "source": "box",
       "contributorIds": ["user2", "user4", "user1"],
-      "dimensions": [
+      "summary": "This is a summary of the API documentation v3",
+      "tags": [
         "documentation",
         "api",
         "technical",

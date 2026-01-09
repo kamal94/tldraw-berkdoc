@@ -1,0 +1,15 @@
+# Python dependencies for HDBSCAN clustering script
+# Install with: uv pip install -r requirements-clustering.txt
+# Or with uv sync if using pyproject.toml
+
+# Weaviate Python client
+weaviate-client>=4.0.0
+
+# HDBSCAN clustering algorithm
+hdbscan>=0.8.33
+
+# NumPy for efficient vector operations
+numpy>=1.24.0
+
+# Environment variable management
+python-dotenv>=1.0.0

@@ -1,7 +1,7 @@
-docker_volumes/
-
 # dependencies (bun install)
 node_modules
+
+ollama-test-data/
 
 # output
 out
