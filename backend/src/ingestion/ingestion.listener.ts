@@ -26,9 +26,21 @@ export class IngestionListener {
   ) {}
 
   @OnEvent('document.created')
-  async handleDocumentCreated(event: DocumentCreatedEvent) {
-    this.logger.log(`Processing new document: ${event.id}`);
-    await this.ingestDocument(event);
+  async processTags(event: DocumentCreatedEvent) {
+    this.logger.log(`Processing tags for document: ${event.id}`);
+    await this.extractTags(event);
+  }
+
+  @OnEvent('document.created')
+  async processSummary(event: DocumentCreatedEvent) {
+    this.logger.log(`Processing summary for document: ${event.id}`);
+    await this.generateSummary(event);
+  }
+
+  @OnEvent('document.created')
+  async processEmbeddings(event: DocumentCreatedEvent) {
+    this.logger.log(`Processing embeddings for document: ${event.id}`);
+    await this.generateEmbeddings(event);
   }
 
   @OnEvent('document.updated')
@@ -42,8 +54,12 @@ export class IngestionListener {
       this.logger.warn(`Failed to delete old chunks for document ${event.id}`, error);
     }
 
-    // Re-ingest the document
-    await this.ingestDocument(event);
+    // Trigger all three pipelines in parallel
+    await Promise.all([
+      this.extractTags(event),
+      this.generateSummary(event),
+      this.generateEmbeddings(event),
+    ]);
   }
 
   @OnEvent('document.deleted')
@@ -58,23 +74,55 @@ export class IngestionListener {
     }
   }
 
-  private async ingestDocument(
+  /**
+   * Process tags: generate tags using LLM and update database
+   */
+  private async extractTags(
     event: DocumentCreatedEvent | DocumentUpdatedEvent,
   ): Promise<void> {
     try {
-      // Generate summary and tags using LLM (single HTTP call)
-      this.logger.log(`Generating metadata for document ${event.id}...`);
-      const { summary, tags } = await this.llmService.analyze(event.content);
+      this.logger.log(`Generating tags for document ${event.id}...`);
+      const tags = await this.llmService.generateTags(event.content);
 
-      this.logger.log(`Generated summary for document ${event.id}: ${summary}`);
       this.logger.log(`Generated tags for document ${event.id}: ${tags.join(', ')}`);
 
-      // Update document in database with LLM-generated metadata
-      this.databaseService.updateDocument(event.id, {
-        summary,
-        tags,
-      });
+      // Update document in database with tags
+      this.databaseService.updateDocument(event.id, { tags });
 
+      this.logger.log(`Successfully processed tags for document ${event.id}`);
+    } catch (error) {
+      this.logger.error(`Failed to process tags for document ${event.id}`, error);
+    }
+  }
+
+  /**
+   * Process summary: generate summary using LLM and update database
+   */
+  private async generateSummary(
+    event: DocumentCreatedEvent | DocumentUpdatedEvent,
+  ): Promise<void> {
+    try {
+      this.logger.log(`Generating summary for document ${event.id}...`);
+      const summary = await this.llmService.generateSummary(event.content);
+
+      this.logger.log(`Generated summary for document ${event.id}: ${summary}`);
+
+      // Update document in database with summary
+      this.databaseService.updateDocument(event.id, { summary });
+
+      this.logger.log(`Successfully processed summary for document ${event.id}`);
+    } catch (error) {
+      this.logger.error(`Failed to process summary for document ${event.id}`, error);
+    }
+  }
+
+  /**
+   * Process embeddings: chunk document, generate embeddings, and store in Weaviate
+   */
+  private async generateEmbeddings(
+    event: DocumentCreatedEvent | DocumentUpdatedEvent,
+  ): Promise<void> {
+    try {
       // Chunk the document
       const chunks = this.chunkDocument(event.content);
       this.logger.log(`Document ${event.id} split into ${chunks.length} chunks`);
@@ -105,9 +153,9 @@ export class IngestionListener {
         }
       }
 
-      this.logger.log(`Successfully ingested document ${event.id}`);
+      this.logger.log(`Successfully processed embeddings for document ${event.id}`);
     } catch (error) {
-      this.logger.error(`Failed to ingest document ${event.id}`, error);
+      this.logger.error(`Failed to process embeddings for document ${event.id}`, error);
     }
   }
 

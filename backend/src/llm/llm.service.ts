@@ -2,12 +2,13 @@ import { Injectable, Logger } from "@nestjs/common";
 import { buildSummaryPrompt, buildTagsPrompt } from "./prompts.js";
 import { parseSummary, parseTags } from "./parsers.js";
 
+const MAX_CONTENT_LENGTH = 500_000; // 500KB in characters, as JS strings are UTF-16, exact bytes may vary
 @Injectable()
 export class LlmService {
   private readonly logger = new Logger(LlmService.name);
   private readonly ollamaBaseUrl =
     process.env.OLLAMA_BASE_URL || "http://localhost:11434";
-  private readonly ollamaModel = process.env.OLLAMA_MODEL || "gemma3:1b";
+  private readonly ollamaModel = process.env.OLLAMA_MODEL || "gemma3:4b";
 
   /**
    * Call Ollama API directly to generate text
@@ -53,62 +54,145 @@ export class LlmService {
 
   /**
    * Generate a one-sentence summary for the document content
+   * Retries up to 3 times if the response is empty
    */
   async generateSummary(content: string): Promise<string> {
-    try {
-      const prompt = buildSummaryPrompt(content);
-      const start = Date.now();
-      const response = await this.callCompletions(prompt, {
-        max_tokens: 80,
-        temperature: 0.5,
-      });
-      const elapsed = Date.now() - start;
-      this.logger.log(`generateSummary took ${elapsed}ms`);
+    const truncatedContent = this.truncateContent(content);
 
-      // Store prompt and response to filesystem for later test data use
-      await this.storeCallAndResponse("summary", {
-        request: {
-          prompt,
+    const maxRetries = 3;
+    let lastError: Error | null = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const prompt = buildSummaryPrompt(truncatedContent);
+        const start = Date.now();
+        const response = await this.callCompletions(prompt, {
           max_tokens: 80,
           temperature: 0.5,
-        },
-        response,
-      });
+        });
+        const elapsed = Date.now() - start;
+        this.logger.log(`generateSummary attempt ${attempt} took ${elapsed}ms`);
 
-      return parseSummary(response);
-    } catch (error) {
-      this.logger.error("Failed to generate summary via Ollama", error);
-      return "";
+        // Store prompt and response to filesystem for later test data use
+        await this.storeCallAndResponse("summary", {
+          request: {
+            prompt,
+            max_tokens: 80,
+            temperature: 0.5,
+          },
+          response,
+        });
+
+        const parsedSummary = parseSummary(response);
+        
+        // If we got a non-empty summary, return it
+        if (parsedSummary && parsedSummary.trim().length > 0) {
+          return parsedSummary;
+        }
+
+        // If empty and not the last attempt, log and retry
+        if (attempt < maxRetries) {
+          this.logger.warn(
+            `generateSummary attempt ${attempt} returned empty response, retrying...`
+          );
+        }
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        this.logger.error(
+          `Failed to generate summary via Ollama (attempt ${attempt}/${maxRetries})`,
+          lastError
+        );
+        
+        // If it's the last attempt, break and return empty string
+        if (attempt === maxRetries) {
+          break;
+        }
+      }
     }
+
+    // If we exhausted all retries, return empty string
+    if (lastError) {
+      this.logger.error(
+        "Failed to generate summary after all retries",
+        lastError
+      );
+    } else {
+      this.logger.warn(
+        "generateSummary returned empty response after all retries"
+      );
+    }
+    return "";
   }
 
   /**
    * Generate top 10 tags for the document content
+   * Retries up to 3 times if the response is empty
    */
   async generateTags(content: string): Promise<string[]> {
-    try {
-      const prompt = buildTagsPrompt(content);
-      const start = Date.now();
+    const truncatedContent = this.truncateContent(content);
+    const maxRetries = 3;
+    let lastError: Error | null = null;
 
-      const response = await this.callCompletions(prompt, {
-        max_tokens: 100,
-        temperature: 0.3,
-      });
-      const elapsed = Date.now() - start;
-      this.logger.log(`generateTags took ${elapsed}ms`);
-      await this.storeCallAndResponse("tags", {
-        request: {
-          prompt,
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const prompt = buildTagsPrompt(truncatedContent);
+        const start = Date.now();
+
+        const response = await this.callCompletions(prompt, {
           max_tokens: 100,
           temperature: 0.3,
-        },
-        response,
-      });
-      return parseTags(response);
-    } catch (error) {
-      this.logger.error("Failed to generate tags via Ollama", error);
-      return [];
+        });
+        const elapsed = Date.now() - start;
+        this.logger.log(`generateTags attempt ${attempt} took ${elapsed}ms`);
+        
+        await this.storeCallAndResponse("tags", {
+          request: {
+            prompt,
+            max_tokens: 100,
+            temperature: 0.3,
+          },
+          response,
+        });
+
+        const parsedTags = parseTags(response);
+        
+        // If we got non-empty tags, return them
+        if (parsedTags && parsedTags.length > 0) {
+          return parsedTags;
+        }
+
+        // If empty and not the last attempt, log and retry
+        if (attempt < maxRetries) {
+          this.logger.warn(
+            `generateTags attempt ${attempt} returned empty response, retrying...`
+          );
+        }
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        this.logger.error(
+          `Failed to generate tags via Ollama (attempt ${attempt}/${maxRetries})`,
+          lastError
+        );
+        
+        // If it's the last attempt, break and return empty array
+        if (attempt === maxRetries) {
+          break;
+        }
+      }
     }
+
+    // If we exhausted all retries, return empty array
+    if (lastError) {
+      this.logger.error(
+        "Failed to generate tags after all retries",
+        lastError
+      );
+    } else {
+      this.logger.warn(
+        "generateTags returned empty response after all retries"
+      );
+    }
+    return [];
   }
 
   /**
@@ -159,5 +243,12 @@ export class LlmService {
     } catch (err) {
       this.logger.warn(`Failed to write ${type} test data: ${err}`);
     }
+  }
+
+  private truncateContent(content: string): string {
+    if (content.length > MAX_CONTENT_LENGTH) {
+      return content.slice(0, MAX_CONTENT_LENGTH);
+    }
+    return content;
   }
 }

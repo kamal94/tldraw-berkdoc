@@ -9,7 +9,13 @@
 export function buildSummaryPrompt(content: string): string {
   // Clean and truncate content to avoid context window issues
   const cleanedContent = content.replace(/\s+/g, ' ').trim();
-  return `Summarize the following text in one concise sentence: ${cleanedContent}`;
+  return `Summarize the following text in one concise sentence. Return your response as valid JSON in this exact format:
+{
+  "summary": "your one-sentence summary here"
+}
+
+Text to summarize:
+${cleanedContent}`;
 }
 
 /**
@@ -17,7 +23,7 @@ export function buildSummaryPrompt(content: string): string {
  */
 export function buildTagsPrompt(content: string): string {
   const cleanedContent = content.replace(/\s+/g, ' ').trim();
-  return `Extract up to 10 canonical tags from the <TEXT> section.
+  return `Extract up to 5 canonical tags from the <TEXT> section.
 
 Rules:
 - Tags should represent reusable concepts, not phrasing from the sentence
@@ -25,7 +31,10 @@ Rules:
 - Prefer standard industry terms when applicable
 - 1–3 words per tag
 - lowercase only
-- Return a comma-separated list and nothing else
+- Return your response as valid JSON in this exact format:
+{
+  "tags": ["tag1", "tag2", "tag3"]
+}
 
 <TEXT>
 ${cleanedContent}
