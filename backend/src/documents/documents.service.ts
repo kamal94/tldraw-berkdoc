@@ -41,17 +41,22 @@ export class DocumentsService {
       googleModifiedTime: dto.googleModifiedTime,
     });
 
-    // Emit event for ingestion pipeline
-    this.eventEmitter.emit(
-      'document.created',
-      new DocumentCreatedEvent(
-        document.id,
-        document.title,
-        document.content,
-        document.source,
-        userId,
-      ),
-    );
+    // Emit event for ingestion pipeline asynchronously
+    this.eventEmitter
+      .emitAsync(
+        'document.created',
+        new DocumentCreatedEvent(
+          document.id,
+          document.title,
+          document.content,
+          document.source,
+          userId,
+        ),
+      )
+      .catch((error) => {
+        // Log error but don't fail document creation
+        console.error('Failed to emit document.created event', error);
+      });
 
     return document;
   }
@@ -90,18 +95,23 @@ export class DocumentsService {
     const updatedRow = this.databaseService.findDocumentById(documentId)!;
     const document = this.rowToDocument(updatedRow);
 
-    // If content changed, emit event for re-ingestion
+    // If content changed, emit event for re-ingestion asynchronously
     if (contentChanged) {
-      this.eventEmitter.emit(
-        'document.updated',
-        new DocumentUpdatedEvent(
-          document.id,
-          document.title,
-          document.content,
-          document.source,
-          userId,
-        ),
-      );
+      this.eventEmitter
+        .emitAsync(
+          'document.updated',
+          new DocumentUpdatedEvent(
+            document.id,
+            document.title,
+            document.content,
+            document.source,
+            userId,
+          ),
+        )
+        .catch((error) => {
+          // Log error but don't fail document update
+          console.error('Failed to emit document.updated event', error);
+        });
     }
 
     return document;
@@ -113,8 +123,13 @@ export class DocumentsService {
 
     this.databaseService.deleteDocument(documentId);
 
-    // Emit event to remove from vector store
-    this.eventEmitter.emit('document.deleted', new DocumentDeletedEvent(documentId, userId));
+    // Emit event to remove from vector store asynchronously
+    this.eventEmitter
+      .emitAsync('document.deleted', new DocumentDeletedEvent(documentId, userId))
+      .catch((error) => {
+        // Log error but don't fail document deletion
+        console.error('Failed to emit document.deleted event', error);
+      });
   }
 
   private rowToDocument(row: DocumentRow): Document {

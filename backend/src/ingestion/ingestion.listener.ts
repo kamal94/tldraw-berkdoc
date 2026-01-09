@@ -4,6 +4,7 @@ import { EmbeddingService } from '../embedding/embedding.service';
 import { WeaviateService, type DocumentChunkData } from '../weaviate/weaviate.service';
 import { LlmService } from '../llm/llm.service';
 import { DatabaseService } from '../database/database.service';
+import { QueueService } from '../queue/queue.service';
 import {
   DocumentCreatedEvent,
   DocumentUpdatedEvent,
@@ -23,6 +24,7 @@ export class IngestionListener {
     private weaviateService: WeaviateService,
     private llmService: LlmService,
     private databaseService: DatabaseService,
+    private queueService: QueueService,
   ) {}
 
   // @OnEvent('document.created')
@@ -39,27 +41,81 @@ export class IngestionListener {
 
   @OnEvent('document.created')
   async processEmbeddings(event: DocumentCreatedEvent) {
-    this.logger.log(`Processing embeddings for document: ${event.id}`);
-    await this.generateEmbeddings(event);
+    this.logger.log(`Queuing embeddings processing for document: ${event.id}`);
+    // Queue the embedding generation to avoid blocking
+    this.queueService
+      .queueEmbedding(
+        () => this.generateEmbeddings(event),
+        `embeddings-${event.id}`,
+      )
+      .catch((error) => {
+        this.logger.error(
+          `Failed to queue embeddings for document ${event.id}`,
+          error,
+        );
+      });
   }
 
   @OnEvent('document.updated')
   async handleDocumentUpdated(event: DocumentUpdatedEvent) {
-    this.logger.log(`Re-processing updated document: ${event.id}`);
+    this.logger.log(`Queuing re-processing for updated document: ${event.id}`);
 
-    // Delete existing chunks first
-    try {
-      await this.weaviateService.deleteDocumentChunks(event.id, event.userId);
-    } catch (error) {
-      this.logger.warn(`Failed to delete old chunks for document ${event.id}`, error);
-    }
-
-    // Trigger all three pipelines in parallel
-    await Promise.all([
-      this.extractTags(event),
-      this.generateSummary(event),
-      this.generateEmbeddings(event),
-    ]);
+    // Queue all operations - they will be processed with appropriate concurrency limits
+    Promise.all([
+      // Delete existing chunks first (not queued, should be fast)
+      this.queueService
+        .queueWeaviate(
+          () =>
+            this.weaviateService.deleteDocumentChunks(event.id, event.userId),
+          `delete-chunks-${event.id}`,
+        )
+        .catch((error) => {
+          this.logger.warn(
+            `Failed to delete old chunks for document ${event.id}`,
+            error,
+          );
+        }),
+      // Queue LLM operations
+      this.queueService
+        .queueLlmOperation(
+          () => this.extractTags(event),
+          `tags-${event.id}`,
+        )
+        .catch((error) => {
+          this.logger.error(
+            `Failed to queue tags extraction for document ${event.id}`,
+            error,
+          );
+        }),
+      this.queueService
+        .queueLlmOperation(
+          () => this.generateSummary(event),
+          `summary-${event.id}`,
+        )
+        .catch((error) => {
+          this.logger.error(
+            `Failed to queue summary generation for document ${event.id}`,
+            error,
+          );
+        }),
+      // Queue embedding generation
+      this.queueService
+        .queueEmbedding(
+          () => this.generateEmbeddings(event),
+          `embeddings-${event.id}`,
+        )
+        .catch((error) => {
+          this.logger.error(
+            `Failed to queue embeddings for document ${event.id}`,
+            error,
+          );
+        }),
+    ]).catch((error) => {
+      this.logger.error(
+        `Failed to queue document update processing for ${event.id}`,
+        error,
+      );
+    });
   }
 
   @OnEvent('document.deleted')
@@ -82,6 +138,7 @@ export class IngestionListener {
   ): Promise<void> {
     try {
       this.logger.log(`Generating tags for document ${event.id}...`);
+      // LLM call is already queued by the caller, but we ensure it's tracked
       const tags = await this.llmService.generateTags(event.content);
 
       this.logger.log(`Generated tags for document ${event.id}: ${tags.join(', ')}`);
@@ -92,6 +149,7 @@ export class IngestionListener {
       this.logger.log(`Successfully processed tags for document ${event.id}`);
     } catch (error) {
       this.logger.error(`Failed to process tags for document ${event.id}`, error);
+      throw error;
     }
   }
 
@@ -103,6 +161,7 @@ export class IngestionListener {
   ): Promise<void> {
     try {
       this.logger.log(`Generating summary for document ${event.id}...`);
+      // LLM call is already queued by the caller, but we ensure it's tracked
       const summary = await this.llmService.generateSummary(event.content);
 
       this.logger.log(`Generated summary for document ${event.id}: ${summary}`);
@@ -113,6 +172,7 @@ export class IngestionListener {
       this.logger.log(`Successfully processed summary for document ${event.id}`);
     } catch (error) {
       this.logger.error(`Failed to process summary for document ${event.id}`, error);
+      throw error;
     }
   }
 
@@ -127,13 +187,16 @@ export class IngestionListener {
       const chunks = this.chunkDocument(event.content);
       this.logger.log(`Document ${event.id} split into ${chunks.length} chunks`);
 
-      // Process each chunk
-      for (const [index, chunk] of chunks.entries()) {
+      // Process each chunk with proper queueing
+      const chunkPromises = chunks.map(async (chunk, index) => {
         try {
-          // Generate embedding
-          const embedding = await this.embeddingService.embed(chunk);
+          // Generate embedding (queued with embedding queue)
+          const embedding = await this.queueService.queueEmbedding(
+            () => this.embeddingService.embed(chunk),
+            `embed-chunk-${event.id}-${index}`,
+          );
 
-          // Store in Weaviate
+          // Store in Weaviate (queued with weaviate queue)
           const chunkData: DocumentChunkData = {
             documentId: event.id,
             chunkIndex: index,
@@ -143,19 +206,29 @@ export class IngestionListener {
             userId: event.userId,
           };
 
-          await this.weaviateService.storeChunk(chunkData, embedding);
-          this.logger.debug(`Stored chunk ${index + 1}/${chunks.length} for document ${event.id}`);
+          await this.queueService.queueWeaviate(
+            () => this.weaviateService.storeChunk(chunkData, embedding),
+            `store-chunk-${event.id}-${index}`,
+          );
+          this.logger.debug(
+            `Stored chunk ${index + 1}/${chunks.length} for document ${event.id}`,
+          );
         } catch (error) {
           this.logger.error(
             `Failed to process chunk ${index} for document ${event.id}`,
             error,
           );
+          throw error;
         }
-      }
+      });
+
+      // Wait for all chunks to be processed
+      await Promise.all(chunkPromises);
 
       this.logger.log(`Successfully processed embeddings for document ${event.id}`);
     } catch (error) {
       this.logger.error(`Failed to process embeddings for document ${event.id}`, error);
+      throw error;
     }
   }
 

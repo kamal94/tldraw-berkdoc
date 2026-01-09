@@ -3,6 +3,7 @@ import { OnEvent, EventEmitter2 } from '@nestjs/event-emitter';
 import { GoogleDriveService } from './google-drive.service';
 import { DatabaseService } from '../database/database.service';
 import { DocumentsService } from '../documents/documents.service';
+import { QueueService } from '../queue/queue.service';
 import {
   GoogleDriveSyncRequestedEvent,
   GoogleDriveFileDiscoveredEvent,
@@ -17,6 +18,7 @@ export class GoogleDriveSyncListener {
     private databaseService: DatabaseService,
     private documentsService: DocumentsService,
     private eventEmitter: EventEmitter2,
+    private queueService: QueueService,
   ) {}
 
   @OnEvent('google.drive.sync.requested')
@@ -41,7 +43,8 @@ export class GoogleDriveSyncListener {
         for (const file of files) {
           if (!file.id || !file.name || !file.mimeType || !file.modifiedTime) continue;
           
-          this.eventEmitter.emit(
+          // Use emitAsync to ensure events are processed asynchronously
+          this.eventEmitter.emitAsync(
             'google.drive.file.discovered',
             new GoogleDriveFileDiscoveredEvent(event.userId, {
               id: file.id,
@@ -50,7 +53,12 @@ export class GoogleDriveSyncListener {
               modifiedTime: file.modifiedTime,
               webViewLink: file.webViewLink || undefined,
             }),
-          );
+          ).catch((error) => {
+            this.logger.error(
+              `Failed to emit file.discovered event for ${file.name}`,
+              error,
+            );
+          });
           totalFilesDiscovered++;
         }
 
@@ -66,46 +74,61 @@ export class GoogleDriveSyncListener {
   @OnEvent('google.drive.file.discovered')
   async handleFileDiscovered(event: GoogleDriveFileDiscoveredEvent) {
     const { userId, file } = event;
-    this.logger.log(`Processing file ${file.name} (${file.id}) for user ${userId}`);
+    this.logger.log(`Queuing file ${file.name} (${file.id}) for user ${userId}`);
 
-    try {
-      const existingDoc = this.databaseService.findDocumentByGoogleFileId(file.id);
+    // Queue the file processing to avoid blocking the event loop
+    this.queueService.queueFileProcessing(
+      async () => {
+        this.logger.log(`Processing file ${file.name} (${file.id}) for user ${userId}`);
 
-      // Skip if already synced and not modified
-      if (existingDoc && existingDoc.google_modified_time === file.modifiedTime) {
-        this.logger.debug(`File ${file.name} is already up to date, skipping.`);
-        return;
-      }
+        try {
+          const existingDoc = this.databaseService.findDocumentByGoogleFileId(file.id);
 
-      this.logger.log(`Downloading and extracting text for ${file.name}...`);
-      const content = await this.googleDriveService.downloadAndExtractText(
-        userId,
-        file.id,
-        file.mimeType,
+          // Skip if already synced and not modified
+          if (existingDoc && existingDoc.google_modified_time === file.modifiedTime) {
+            this.logger.debug(`File ${file.name} is already up to date, skipping.`);
+            return;
+          }
+
+          this.logger.log(`Downloading and extracting text for ${file.name}...`);
+          const content = await this.googleDriveService.downloadAndExtractText(
+            userId,
+            file.id,
+            file.mimeType,
+          );
+
+          if (existingDoc) {
+            this.logger.log(`Updating existing document for ${file.name}`);
+            await this.documentsService.update(userId, existingDoc.id, {
+              title: file.name,
+              content,
+              url: file.webViewLink,
+              googleModifiedTime: file.modifiedTime,
+            });
+          } else {
+            this.logger.log(`Creating new document for ${file.name}`);
+            await this.documentsService.create(userId, {
+              title: file.name,
+              content,
+              url: file.webViewLink,
+              source: 'google-drive',
+              googleFileId: file.id,
+              googleModifiedTime: file.modifiedTime,
+            });
+          }
+        } catch (error) {
+          this.logger.error(`Failed to process file ${file.name} for user ${userId}`, error);
+          throw error; // Re-throw so queue service can track failures
+        }
+      },
+      `process-file-${file.id}`,
+    ).catch((error) => {
+      // Error already logged by queue service
+      this.logger.error(
+        `File processing job failed for ${file.name} (${file.id})`,
+        error,
       );
-
-      if (existingDoc) {
-        this.logger.log(`Updating existing document for ${file.name}`);
-        await this.documentsService.update(userId, existingDoc.id, {
-          title: file.name,
-          content,
-          url: file.webViewLink,
-          googleModifiedTime: file.modifiedTime,
-        });
-      } else {
-        this.logger.log(`Creating new document for ${file.name}`);
-        await this.documentsService.create(userId, {
-          title: file.name,
-          content,
-          url: file.webViewLink,
-          source: 'google-drive',
-          googleFileId: file.id,
-          googleModifiedTime: file.modifiedTime,
-        });
-      }
-    } catch (error) {
-      this.logger.error(`Failed to process file ${file.name} for user ${userId}`, error);
-    }
+    });
   }
 }
 

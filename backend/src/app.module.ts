@@ -9,6 +9,7 @@ import { EmbeddingModule } from './embedding/embedding.module';
 import { IngestionModule } from './ingestion/ingestion.module';
 import { GoogleDriveModule } from './google-drive/google-drive.module';
 import { LlmModule } from './llm/llm.module';
+import { QueueModule } from './queue/queue.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { LlmModule } from './llm/llm.module';
     IngestionModule,
     GoogleDriveModule,
     LlmModule,
+    QueueModule,
   ],
 })
 export class AppModule {}
