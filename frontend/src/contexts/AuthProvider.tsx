@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
 import { authApi } from '../api/auth';
 import type { User, LoginCredentials, RegisterCredentials } from '../api/auth';
 import { AuthContext } from './AuthContext';
@@ -48,18 +48,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.href = authApi.getGoogleAuthUrl();
   }, []);
 
+  // Memoize context value to prevent unnecessary re-renders
+  const contextValue = useMemo(
+    () => ({
+      user,
+      isLoading,
+      isAuthenticated: !!user,
+      login,
+      register,
+      logout,
+      loginWithGoogle,
+    }),
+    [user, isLoading, login, register, logout, loginWithGoogle]
+  );
+
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isLoading,
-        isAuthenticated: !!user,
-        login,
-        register,
-        logout,
-        loginWithGoogle,
-      }}
-    >
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

@@ -103,12 +103,25 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       // Note: We keep the dimensions column for backward compatibility but stop using it
     }
 
+    // Boards table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS boards (
+        id TEXT PRIMARY KEY,
+        user_id TEXT UNIQUE NOT NULL,
+        snapshot TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      )
+    `);
+
     // Create indexes
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
       CREATE INDEX IF NOT EXISTS idx_users_provider_id ON users(provider_id);
       CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id);
       CREATE INDEX IF NOT EXISTS idx_documents_google_file_id ON documents(google_file_id);
+      CREATE INDEX IF NOT EXISTS idx_boards_user_id ON boards(user_id);
     `);
 
     this.logger.log('Database tables initialized');
@@ -332,6 +345,57 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   clearAllDocuments() {
     this.db.exec('DELETE FROM documents');
   }
+
+  // Board operations
+  createBoard(board: { id: string; userId: string; snapshot?: string }) {
+    const stmt = this.db.prepare(`
+      INSERT INTO boards (id, user_id, snapshot, created_at, updated_at)
+      VALUES ($id, $userId, $snapshot, $createdAt, $updatedAt)
+    `);
+
+    const now = new Date().toISOString();
+    stmt.run({
+      $id: board.id,
+      $userId: board.userId,
+      $snapshot: board.snapshot || null,
+      $createdAt: now,
+      $updatedAt: now,
+    });
+  }
+
+  findBoardById(id: string): BoardRow | null {
+    const stmt = this.db.prepare('SELECT * FROM boards WHERE id = ?');
+    return stmt.get(id) as BoardRow | null;
+  }
+
+  findBoardByUserId(userId: string): BoardRow | null {
+    const stmt = this.db.prepare('SELECT * FROM boards WHERE user_id = ?');
+    return stmt.get(userId) as BoardRow | null;
+  }
+
+  updateBoardSnapshot(userId: string, snapshot: string) {
+    const now = new Date().toISOString();
+    const stmt = this.db.prepare(`
+      UPDATE boards SET snapshot = $snapshot, updated_at = $updatedAt
+      WHERE user_id = $userId
+    `);
+
+    stmt.run({
+      $userId: userId,
+      $snapshot: snapshot,
+      $updatedAt: now,
+    });
+  }
+
+  deleteBoard(id: string) {
+    const stmt = this.db.prepare('DELETE FROM boards WHERE id = ?');
+    stmt.run(id);
+  }
+
+  deleteBoardByUserId(userId: string) {
+    const stmt = this.db.prepare('DELETE FROM boards WHERE user_id = ?');
+    stmt.run(userId);
+  }
 }
 
 // Row types for SQLite results
@@ -361,6 +425,14 @@ export interface DocumentRow {
   google_file_id: string | null;
   google_modified_time: string | null;
   summary: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BoardRow {
+  id: string;
+  user_id: string;
+  snapshot: string | null;
   created_at: string;
   updated_at: string;
 }

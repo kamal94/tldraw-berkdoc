@@ -10,6 +10,7 @@ import { IngestionModule } from './ingestion/ingestion.module';
 import { GoogleDriveModule } from './google-drive/google-drive.module';
 import { LlmModule } from './llm/llm.module';
 import { QueueModule } from './queue/queue.module';
+import { BoardsModule } from './boards/boards.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { QueueModule } from './queue/queue.module';
     GoogleDriveModule,
     LlmModule,
     QueueModule,
+    BoardsModule,
   ],
 })
 export class AppModule {}

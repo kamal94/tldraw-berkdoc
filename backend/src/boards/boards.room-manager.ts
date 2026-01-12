@@ -1,0 +1,148 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { TLSocketRoom, RoomSnapshot } from '@tldraw/sync-core';
+import type { UnknownRecord } from '@tldraw/store';
+import { DatabaseService } from '../database/database.service';
+
+// Note: We don't define a custom schema here because the server doesn't need to validate
+// custom shape props - it just stores and syncs whatever the client sends.
+// The TLSocketRoom will use its default schema which accepts any shape types.
+
+// Debounce helper
+function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  return ((...args: unknown[]) => {
+    if (timeoutId) clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => fn(...args), ms);
+  }) as T;
+}
+
+@Injectable()
+export class BoardsRoomManager {
+  private readonly logger = new Logger(BoardsRoomManager.name);
+  private readonly rooms = new Map<string, TLSocketRoom<UnknownRecord>>();
+  private readonly persistFns = new Map<string, () => void>();
+
+  constructor(private readonly databaseService: DatabaseService) {}
+
+  /**
+   * Get or create a TLSocketRoom for a user.
+   * If the user has a board in the database, load it.
+   * If not, create a new board and room.
+   */
+  async getOrCreateRoom(userId: string): Promise<TLSocketRoom<UnknownRecord>> {
+    // Check if room already exists in memory
+    const existingRoom = this.rooms.get(userId);
+    if (existingRoom && !existingRoom.isClosed()) {
+      return existingRoom;
+    }
+
+    // Load board from database
+    const boardRow = this.databaseService.findBoardByUserId(userId);
+    let initialSnapshot: RoomSnapshot | undefined;
+
+    if (boardRow) {
+      // Parse existing snapshot
+      if (boardRow.snapshot) {
+        try {
+          initialSnapshot = JSON.parse(boardRow.snapshot) as RoomSnapshot;
+          this.logger.log(`Loaded board snapshot for user ${userId}`);
+        } catch (error) {
+          this.logger.error(`Failed to parse snapshot for user ${userId}:`, error);
+        }
+      }
+    } else {
+      // Create new board in database
+      const boardId = crypto.randomUUID();
+      this.databaseService.createBoard({ id: boardId, userId });
+      this.logger.log(`Created new board ${boardId} for user ${userId}`);
+    }
+
+    // Create debounced persist function
+    const persistSnapshot = debounce(() => {
+      const room = this.rooms.get(userId);
+      if (room && !room.isClosed()) {
+        const snapshot = room.getCurrentSnapshot();
+        this.databaseService.updateBoardSnapshot(userId, JSON.stringify(snapshot));
+        this.logger.debug(`Persisted snapshot for user ${userId}`);
+      }
+    }, 1000);
+
+    this.persistFns.set(userId, persistSnapshot);
+
+    // Create the room (uses default tldraw schema)
+    const room = new TLSocketRoom<UnknownRecord>({
+      initialSnapshot,
+      log: {
+        warn: (...args: unknown[]) => this.logger.warn(args.join(' ')),
+        error: (...args: unknown[]) => this.logger.error(args.join(' ')),
+      },
+      onDataChange: () => {
+        // Persist on data change (debounced)
+        persistSnapshot();
+      },
+      onSessionRemoved: (_room, { sessionId, numSessionsRemaining }) => {
+        this.logger.log(
+          `Session ${sessionId} removed from user ${userId}'s room. ` +
+            `${numSessionsRemaining} sessions remaining.`
+        );
+
+        // Optionally clean up room when no sessions remain
+        // For now, we keep the room in memory for faster reconnection
+      },
+    });
+
+    this.rooms.set(userId, room);
+    this.logger.log(`Created room for user ${userId}`);
+
+    return room;
+  }
+
+  /**
+   * Get an existing room for a user.
+   * Returns undefined if no room exists.
+   */
+  getRoom(userId: string): TLSocketRoom<UnknownRecord> | undefined {
+    const room = this.rooms.get(userId);
+    if (room && room.isClosed()) {
+      this.rooms.delete(userId);
+      this.persistFns.delete(userId);
+      return undefined;
+    }
+    return room;
+  }
+
+  /**
+   * Dispose of a room and persist its final state.
+   */
+  disposeRoom(userId: string): void {
+    const room = this.rooms.get(userId);
+    if (room && !room.isClosed()) {
+      // Final persist before closing
+      const snapshot = room.getCurrentSnapshot();
+      this.databaseService.updateBoardSnapshot(userId, JSON.stringify(snapshot));
+      room.close();
+    }
+    this.rooms.delete(userId);
+    this.persistFns.delete(userId);
+    this.logger.log(`Disposed room for user ${userId}`);
+  }
+
+  /**
+   * Get all active room user IDs.
+   */
+  getActiveRoomUserIds(): string[] {
+    return Array.from(this.rooms.keys()).filter((userId) => {
+      const room = this.rooms.get(userId);
+      return room && !room.isClosed();
+    });
+  }
+
+  /**
+   * Dispose all rooms (for shutdown).
+   */
+  disposeAllRooms(): void {
+    for (const userId of this.rooms.keys()) {
+      this.disposeRoom(userId);
+    }
+  }
+}

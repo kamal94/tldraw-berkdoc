@@ -75,7 +75,7 @@ export function parseTags(response: string): string[] {
       });
 
     return normalizedTags.slice(0, 10);
-  } catch (e) {
+  } catch {
     // If JSON object parsing fails, try JSON array format
     try {
       const jsonArrayMatch = text.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/);
