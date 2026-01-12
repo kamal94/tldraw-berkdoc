@@ -10,9 +10,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tldraw/sync": "^4.2.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "tldraw": "^4.2.1"
+    "tldraw": "4.2.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
