@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Command } from "cmdk";
 import * as Dialog from "@radix-ui/react-dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
@@ -28,14 +28,14 @@ export function SmartExplorer() {
   }, [isAuthenticated]);
 
   // Handle dialog open/close changes
-  const handleOpenChange = (newOpen: boolean) => {
+  const handleOpenChange = useCallback((newOpen: boolean) => {
     setOpen(newOpen);
     if (!newOpen) {
       // Reset state when dialog closes
       reset();
       setQuery("");
     }
-  };
+  }, [reset, setQuery]);
 
   // Close dialog on success after a short delay
   useEffect(() => {
@@ -45,7 +45,7 @@ export function SmartExplorer() {
       }, 2000); // Close after 2 seconds
       return () => clearTimeout(timer);
     }
-  }, [status]);
+  }, [status, handleOpenChange]);
 
   if (!isAuthenticated) {
     return null;
