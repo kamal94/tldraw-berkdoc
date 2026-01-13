@@ -2,10 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { TLSocketRoom, RoomSnapshot } from '@tldraw/sync-core';
 import type { UnknownRecord } from '@tldraw/store';
 import { DatabaseService } from '../database/database.service';
-
-// Note: We don't define a custom schema here because the server doesn't need to validate
-// custom shape props - it just stores and syncs whatever the client sends.
-// The TLSocketRoom will use its default schema which accepts any shape types.
+import { createTLSchema, defaultBindingSchemas, defaultShapeSchemas } from '@tldraw/tlschema';
+import { T } from '@tldraw/validate';
 
 // Debounce helper
 function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T {
@@ -15,6 +13,35 @@ function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T 
     timeoutId = setTimeout(() => fn(...args), ms);
   }) as T;
 }
+
+// Define validators for DocumentShapeProps
+const documentShapeProps = {
+	w: T.number,
+	h: T.number,
+	title: T.string,
+	url: T.string,
+	source: T.string.optional().nullable(),
+	contributors: T.arrayOf(
+		T.object({
+			name: T.string,
+			avatarUrl: T.string.optional(),
+			color: T.string,
+		})
+	),
+	tags: T.arrayOf(T.string),
+	summary: T.string.optional(),
+} as const;
+
+export const schema = createTLSchema({
+	shapes: {
+		...defaultShapeSchemas,
+
+		document: {
+			props: documentShapeProps,
+		},
+	},
+	bindings: defaultBindingSchemas,
+})
 
 @Injectable()
 export class BoardsRoomManager {
@@ -71,6 +98,7 @@ export class BoardsRoomManager {
 
     // Create the room (uses default tldraw schema)
     const room = new TLSocketRoom<UnknownRecord>({
+      schema,
       initialSnapshot,
       log: {
         warn: (...args: unknown[]) => this.logger.warn(args.join(' ')),

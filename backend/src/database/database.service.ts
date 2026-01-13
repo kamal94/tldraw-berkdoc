@@ -108,12 +108,20 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       CREATE TABLE IF NOT EXISTS boards (
         id TEXT PRIMARY KEY,
         user_id TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
         snapshot TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY (user_id) REFERENCES users(id)
       )
     `);
+
+    // Ensure name column exists (migration for existing databases)
+    const boardCols = this.db.query("PRAGMA table_info(boards)").all() as { name: string }[];
+    if (!boardCols.find(c => c.name === 'name')) {
+      this.db.exec("ALTER TABLE boards ADD COLUMN name TEXT NOT NULL DEFAULT 'My Board'");
+      this.logger.log('Added name column to boards table');
+    }
 
     // Create indexes
     this.db.exec(`
@@ -347,16 +355,17 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   }
 
   // Board operations
-  createBoard(board: { id: string; userId: string; snapshot?: string }) {
+  createBoard(board: { id: string; userId: string; name?: string; snapshot?: string }) {
     const stmt = this.db.prepare(`
-      INSERT INTO boards (id, user_id, snapshot, created_at, updated_at)
-      VALUES ($id, $userId, $snapshot, $createdAt, $updatedAt)
+      INSERT INTO boards (id, user_id, name, snapshot, created_at, updated_at)
+      VALUES ($id, $userId, $name, $snapshot, $createdAt, $updatedAt)
     `);
 
     const now = new Date().toISOString();
     stmt.run({
       $id: board.id,
       $userId: board.userId,
+      $name: board.name || 'My Board',
       $snapshot: board.snapshot || null,
       $createdAt: now,
       $updatedAt: now,
@@ -432,6 +441,7 @@ export interface DocumentRow {
 export interface BoardRow {
   id: string;
   user_id: string;
+  name: string;
   snapshot: string | null;
   created_at: string;
   updated_at: string;

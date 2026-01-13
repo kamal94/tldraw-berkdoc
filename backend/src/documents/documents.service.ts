@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService, type DocumentRow } from '../database/database.service';
 import type { Document } from './entities/document.entity';
@@ -11,6 +11,8 @@ import {
 
 @Injectable()
 export class DocumentsService {
+  private readonly logger = new Logger(DocumentsService.name);
+
   constructor(
     private eventEmitter: EventEmitter2,
     private databaseService: DatabaseService,
@@ -55,7 +57,7 @@ export class DocumentsService {
       )
       .catch((error) => {
         // Log error but don't fail document creation
-        console.error('Failed to emit document.created event', error);
+        this.logger.error('Failed to emit document.created event', error);
       });
 
     return document;
@@ -110,7 +112,7 @@ export class DocumentsService {
         )
         .catch((error) => {
           // Log error but don't fail document update
-          console.error('Failed to emit document.updated event', error);
+          this.logger.error('Failed to emit document.updated event', error);
         });
     }
 
@@ -128,7 +130,7 @@ export class DocumentsService {
       .emitAsync('document.deleted', new DocumentDeletedEvent(documentId, userId))
       .catch((error) => {
         // Log error but don't fail document deletion
-        console.error('Failed to emit document.deleted event', error);
+        this.logger.error('Failed to emit document.deleted event', error);
       });
   }
 

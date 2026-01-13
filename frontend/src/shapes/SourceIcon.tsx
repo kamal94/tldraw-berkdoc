@@ -38,17 +38,7 @@ export function DocumentIcon() {
   );
 }
 
-export type DocumentSource = 
-  | "google-docs" 
-  | "google-sheets" 
-  | "google-drive"
-  | "notion" 
-  | "word" 
-  | "excel" 
-  | "box" 
-  | "github" 
-  | "figma" 
-  | "generic";
+import type { DocumentSource } from "@shared/document-shape.types";
 
 interface SourceIconProps {
   source?: DocumentSource;

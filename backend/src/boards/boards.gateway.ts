@@ -67,7 +67,7 @@ export class BoardsGateway implements OnModuleInit, OnModuleDestroy {
       const secret = this.configService.get<string>('JWT_SECRET') || 'default-secret';
       payload = this.jwtService.verify<JwtPayload>(token, { secret });
     } catch (error) {
-      console.error('WebSocket connection rejected: Invalid token', error);
+      this.logger.error('WebSocket connection rejected: Invalid token', error);
       socket.close(4001, 'Invalid token');
       return;
     }

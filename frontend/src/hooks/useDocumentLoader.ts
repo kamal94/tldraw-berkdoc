@@ -2,8 +2,7 @@ import { useCallback } from "react";
 import { createShapeId, type Editor } from "tldraw";
 import sampleData from "../data/sample-documents.json";
 import { documentsApi } from "../api/documents";
-import type { Contributor } from "../shapes/DocumentShape";
-import type { DocumentSource } from "../shapes/SourceIcon";
+import type { Contributor, DocumentSource } from "@shared/document-shape.types";
 
 const USE_DEMO_DATA = false;
 

@@ -5,9 +5,11 @@ import "tldraw/tldraw.css";
 import { DocumentShapeUtil } from "./shapes/DocumentShape";
 import { AnimationProvider } from "./contexts/AnimationProvider";
 import { AuthProvider } from "./contexts/AuthProvider";
+import { WebSocketProvider } from "./contexts/WebSocketProvider";
 import { useAuth } from "./hooks/useAuth";
 import { ConfigPanel } from "./components/ConfigPanel";
 import { SignInButton } from "./components/SignInButton";
+import { SmartExplorer } from "./components/SmartExplorer";
 import { useBoardSync } from "./hooks/useBoardSync";
 
 const customShapeUtils = [DocumentShapeUtil];
@@ -59,7 +61,6 @@ function AuthenticatedTldraw({ userId }: { userId: string }) {
       </div>
     );
   }
-
   // Render tldraw with sync store when synced
   if (syncStore && syncStore.status === "synced-remote") {
     return (
@@ -114,6 +115,7 @@ function AppContents() {
       )}
       <ConfigPanel />
       <SignInButton />
+      {isAuthenticated && <SmartExplorer />}
     </div>
   );
 }
@@ -121,9 +123,11 @@ function AppContents() {
 function App() {
   return (
     <AuthProvider>
-      <AnimationProvider>
-        <AppContents />
-      </AnimationProvider>
+      <WebSocketProvider>
+        <AnimationProvider>
+          <AppContents />
+        </AnimationProvider>
+      </WebSocketProvider>
     </AuthProvider>
   );
 }

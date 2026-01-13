@@ -1,26 +1,7 @@
 import { Rectangle2d, ShapeUtil } from "tldraw";
 import type { TLBaseShape } from "@tldraw/tlschema";
-import type { DocumentSource } from "./SourceIcon";
+import type { DocumentShapeProps } from "@shared/document-shape.types";
 import { DocumentCard } from "./DocumentCard";
-
-// Contributor type for the shape
-export interface Contributor {
-  name: string;
-  avatarUrl?: string;
-  color: string;
-}
-
-// Document shape properties
-export interface DocumentShapeProps {
-  w: number;
-  h: number;
-  title: string;
-  url: string;
-  source?: DocumentSource;
-  contributors: Contributor[];
-  tags: string[];
-  summary?: string;
-}
 
 // The document shape type
 export type DocumentShape = TLBaseShape<"document", DocumentShapeProps>;

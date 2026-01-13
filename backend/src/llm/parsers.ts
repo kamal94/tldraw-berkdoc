@@ -24,7 +24,6 @@ export function parseSummary(response: string): string {
   try {
     // Extract JSON from markdown code blocks if present
     const jsonMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*(?:```)?/);
-    // console.log("json match:", jsonMatch)
     const jsonText = jsonMatch ? jsonMatch[1] : text;
 
     // Try to parse as JSON
@@ -58,7 +57,6 @@ export function parseTags(response: string): string[] {
     // Extract JSON from markdown code blocks if present
     const jsonMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
     const jsonText = jsonMatch ? jsonMatch[1] : text;
-    console.log("1json text:", jsonText)
     // Try to parse as JSON object
     const parsed = JSON.parse(jsonText);
     const validated = TagsResponseSchema.parse(parsed);
@@ -80,7 +78,6 @@ export function parseTags(response: string): string[] {
     try {
       const jsonArrayMatch = text.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/);
       const arrayText = jsonArrayMatch ? jsonArrayMatch[1] : text;
-      console.log("2json text:", arrayText)
       const jsonArray = JSON.parse(arrayText);
 
       if (Array.isArray(jsonArray)) {

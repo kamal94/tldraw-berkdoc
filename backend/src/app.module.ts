@@ -11,6 +11,7 @@ import { GoogleDriveModule } from './google-drive/google-drive.module';
 import { LlmModule } from './llm/llm.module';
 import { QueueModule } from './queue/queue.module';
 import { BoardsModule } from './boards/boards.module';
+import { AppModule as AppCommunicationModule } from './app/app.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { BoardsModule } from './boards/boards.module';
     LlmModule,
     QueueModule,
     BoardsModule,
+    AppCommunicationModule,
   ],
 })
 export class AppModule {}

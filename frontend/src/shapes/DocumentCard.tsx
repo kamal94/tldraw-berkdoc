@@ -2,7 +2,8 @@ import { useState, useMemo } from "react";
 import { HTMLContainer } from "tldraw";
 import { SourceIcon, ExternalLinkIcon } from "./SourceIcon";
 import { useAnimation } from "../contexts/AnimationContext";
-import type { DocumentShape, Contributor } from "./DocumentShape";
+import type { DocumentShape } from "./DocumentShape";
+import type { Contributor } from "@shared/document-shape.types";
 
 // Number of tags to show before collapsing
 const VISIBLE_TAGS_COUNT = 2;
