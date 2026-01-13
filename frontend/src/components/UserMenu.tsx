@@ -1,7 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 
-export function UserMenu() {
+interface UserMenuProps {
+  onViewDuplicates?: () => void;
+}
+
+export function UserMenu({ onViewDuplicates }: UserMenuProps) {
   const { user, logout } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -77,6 +81,30 @@ export function UserMenu() {
 
           {/* Menu Items */}
           <div className="p-2">
+            {onViewDuplicates && (
+              <button
+                onClick={() => {
+                  setIsOpen(false);
+                  onViewDuplicates();
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
+                  />
+                </svg>
+                View Duplicates
+              </button>
+            )}
             <button
               onClick={() => {
                 setIsOpen(false);

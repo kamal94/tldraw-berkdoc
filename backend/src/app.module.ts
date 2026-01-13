@@ -12,6 +12,7 @@ import { LlmModule } from './llm/llm.module';
 import { QueueModule } from './queue/queue.module';
 import { BoardsModule } from './boards/boards.module';
 import { AppModule as AppCommunicationModule } from './app/app.module';
+import { DuplicatesModule } from './duplicates/duplicates.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { AppModule as AppCommunicationModule } from './app/app.module';
     QueueModule,
     BoardsModule,
     AppCommunicationModule,
+    DuplicatesModule,
   ],
 })
 export class AppModule {}

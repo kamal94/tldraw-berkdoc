@@ -29,6 +29,8 @@ Commands:
   clear-user <userId>   Delete all documents and chunks for a user
   clear-doc <docId>     Delete a specific document and its chunks
   clear-board <userId>  Delete a board for a specific user
+  clear-duplicates <userId>  Clear all duplicates for a user
+  clear-all-duplicates  Clear all duplicates from database
   clear-all             Clear all documents and all chunks from Weaviate
   clear-all-boards      Clear all boards from database
     `);
@@ -78,6 +80,13 @@ Commands:
         break;
       case 'clear-all-boards':
         await clearAllBoards(db);
+        break;
+      case 'clear-duplicates':
+        if (!args[1]) throw new Error('userId is required');
+        await clearDuplicates(db, args[1]);
+        break;
+      case 'clear-all-duplicates':
+        await clearAllDuplicates(db);
         break;
       default:
         console.error(`Unknown command: ${command}`);
@@ -238,6 +247,38 @@ async function clearAllBoards(db: Database) {
   // Delete all boards from DB
   db.exec('DELETE FROM boards');
   console.log('Cleared all boards from database.');
+}
+
+async function clearDuplicates(db: Database, userId: string) {
+  // Check if user exists
+  const user = db.query('SELECT id FROM users WHERE id = ?').get(userId) as any;
+  if (!user) {
+    console.error(`User ${userId} not found`);
+    return;
+  }
+
+  // Count duplicates before deletion
+  const countResult = db.query('SELECT COUNT(*) as count FROM document_duplicates WHERE user_id = ?').get(userId) as any;
+  const count = countResult.count;
+
+  console.log(`Clearing ${count} duplicates for user ${userId}...`);
+  
+  // Delete duplicates from DB
+  const stmt = db.prepare('DELETE FROM document_duplicates WHERE user_id = ?');
+  stmt.run(userId);
+  console.log(`Cleared ${count} duplicates from database.`);
+}
+
+async function clearAllDuplicates(db: Database) {
+  // Count duplicates before deletion
+  const countResult = db.query('SELECT COUNT(*) as count FROM document_duplicates').get() as any;
+  const count = countResult.count;
+
+  console.log(`Clearing ALL duplicates (${count} records)...`);
+  
+  // Delete all duplicates from DB
+  db.exec('DELETE FROM document_duplicates');
+  console.log(`Cleared all ${count} duplicates from database.`);
 }
 
 async function clearAll(db: Database, client: any) {

@@ -40,6 +40,18 @@ class DocumentsApi {
 
     return response.json();
   }
+
+  async findOne(id: string): Promise<Document> {
+    const response = await fetch(`${API_URL}/documents/${id}`, {
+      headers: this.getHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch document');
+    }
+
+    return response.json();
+  }
 }
 
 export const documentsApi = new DocumentsApi();

@@ -50,29 +50,20 @@ export class DocumentsController {
     // Generate embedding for the query
     const queryVector = await this.embeddingService.embed(dto.query);
 
-    // Search in Weaviate
-    const results = await this.weaviateService.searchSimilar(queryVector, user.id, dto.limit || 10);
+    // Search in Weaviate using document embeddings (results are already document-level)
+    const results = await this.weaviateService.searchSimilarDocuments(
+      queryVector,
+      user.id,
+      dto.limit || 10,
+    );
 
-    // Group results by document and return unique documents with relevance
-    const documentScores = new Map<string, { score: number; title: string; source: string }>();
-
-    for (const result of results) {
-      const existing = documentScores.get(result.documentId);
-      if (!existing || result.score > existing.score) {
-        documentScores.set(result.documentId, {
-          score: result.score,
-          title: result.title,
-          source: result.source,
-        });
-      }
-    }
-
-    return Array.from(documentScores.entries())
-      .map(([documentId, data]) => ({
-        documentId,
-        ...data,
-      }))
-      .sort((a, b) => b.score - a.score);
+    // Return results directly (already document-level, no need to group)
+    return results.map((result) => ({
+      documentId: result.documentId,
+      score: result.score,
+      title: result.title,
+      source: result.source,
+    }));
   }
 }
 

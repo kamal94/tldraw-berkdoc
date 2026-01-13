@@ -123,6 +123,25 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       this.logger.log('Added name column to boards table');
     }
 
+    // Document duplicates table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS document_duplicates (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        source_document_id TEXT NOT NULL,
+        target_document_id TEXT NOT NULL,
+        source_chunk_index INTEGER,
+        target_chunk_index INTEGER,
+        similarity_score REAL NOT NULL,
+        duplicate_type TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id),
+        FOREIGN KEY (source_document_id) REFERENCES documents(id),
+        FOREIGN KEY (target_document_id) REFERENCES documents(id)
+      )
+    `);
+
     // Create indexes
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
@@ -130,6 +149,9 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id);
       CREATE INDEX IF NOT EXISTS idx_documents_google_file_id ON documents(google_file_id);
       CREATE INDEX IF NOT EXISTS idx_boards_user_id ON boards(user_id);
+      CREATE INDEX IF NOT EXISTS idx_duplicates_user_id ON document_duplicates(user_id);
+      CREATE INDEX IF NOT EXISTS idx_duplicates_source_document_id ON document_duplicates(source_document_id);
+      CREATE INDEX IF NOT EXISTS idx_duplicates_target_document_id ON document_duplicates(target_document_id);
     `);
 
     this.logger.log('Database tables initialized');
@@ -405,6 +427,85 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     const stmt = this.db.prepare('DELETE FROM boards WHERE user_id = ?');
     stmt.run(userId);
   }
+
+  // Document duplicate operations
+  createDocumentDuplicate(duplicate: {
+    id: string;
+    userId: string;
+    sourceDocumentId: string;
+    targetDocumentId: string;
+    sourceChunkIndex?: number;
+    targetChunkIndex?: number;
+    similarityScore: number;
+    duplicateType: 'chunk' | 'document';
+  }) {
+    const stmt = this.db.prepare(`
+      INSERT INTO document_duplicates (
+        id, user_id, source_document_id, target_document_id,
+        source_chunk_index, target_chunk_index, similarity_score,
+        duplicate_type, created_at, updated_at
+      )
+      VALUES (
+        $id, $userId, $sourceDocumentId, $targetDocumentId,
+        $sourceChunkIndex, $targetChunkIndex, $similarityScore,
+        $duplicateType, $createdAt, $updatedAt
+      )
+    `);
+
+    const now = new Date().toISOString();
+    stmt.run({
+      $id: duplicate.id,
+      $userId: duplicate.userId,
+      $sourceDocumentId: duplicate.sourceDocumentId,
+      $targetDocumentId: duplicate.targetDocumentId,
+      $sourceChunkIndex: duplicate.sourceChunkIndex ?? null,
+      $targetChunkIndex: duplicate.targetChunkIndex ?? null,
+      $similarityScore: duplicate.similarityScore,
+      $duplicateType: duplicate.duplicateType,
+      $createdAt: now,
+      $updatedAt: now,
+    });
+  }
+
+  findDuplicatesByDocumentId(documentId: string): DuplicateRow[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM document_duplicates
+      WHERE source_document_id = ? OR target_document_id = ?
+      ORDER BY similarity_score DESC
+    `);
+    return stmt.all(documentId, documentId) as DuplicateRow[];
+  }
+
+  findDuplicatesByUserId(userId: string): DuplicateRow[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM document_duplicates
+      WHERE user_id = ?
+      ORDER BY similarity_score DESC
+    `);
+    return stmt.all(userId) as DuplicateRow[];
+  }
+
+  findDuplicateById(id: string): DuplicateRow | null {
+    const stmt = this.db.prepare('SELECT * FROM document_duplicates WHERE id = ?');
+    return stmt.get(id) as DuplicateRow | null;
+  }
+
+  deleteDuplicatesByDocumentId(documentId: string) {
+    const stmt = this.db.prepare(`
+      DELETE FROM document_duplicates
+      WHERE source_document_id = ? OR target_document_id = ?
+    `);
+    stmt.run(documentId, documentId);
+  }
+
+  deleteDuplicatesByUserId(userId: string) {
+    const stmt = this.db.prepare('DELETE FROM document_duplicates WHERE user_id = ?');
+    stmt.run(userId);
+  }
+
+  clearAllDuplicates() {
+    this.db.exec('DELETE FROM document_duplicates');
+  }
 }
 
 // Row types for SQLite results
@@ -443,6 +544,19 @@ export interface BoardRow {
   user_id: string;
   name: string;
   snapshot: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DuplicateRow {
+  id: string;
+  user_id: string;
+  source_document_id: string;
+  target_document_id: string;
+  source_chunk_index: number | null;
+  target_chunk_index: number | null;
+  similarity_score: number;
+  duplicate_type: string;
   created_at: string;
   updated_at: string;
 }

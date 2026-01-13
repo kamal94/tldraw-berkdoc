@@ -1,5 +1,5 @@
 // ALWAYS KEEP THIS FILE AS SIMPLE AS POSSIBLE. DO NOT FILL IT WITH IMPLEMENTATION DETAILS.
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Tldraw } from "tldraw";
 import "tldraw/tldraw.css";
 import { DocumentShapeUtil } from "./shapes/DocumentShape";
@@ -10,6 +10,8 @@ import { useAuth } from "./hooks/useAuth";
 import { ConfigPanel } from "./components/ConfigPanel";
 import { SignInButton } from "./components/SignInButton";
 import { SmartExplorer } from "./components/SmartExplorer";
+import { UserMenu } from "./components/UserMenu";
+import { DuplicatesPage } from "./components/DuplicatesPage";
 import { useBoardSync } from "./hooks/useBoardSync";
 
 const customShapeUtils = [DocumentShapeUtil];
@@ -102,10 +104,21 @@ function GuestTldraw() {
 
 function AppContents() {
   const { user, isAuthenticated } = useAuth();
+  const [showDuplicates, setShowDuplicates] = useState(false);
   
   // Memoize userId to prevent unnecessary re-renders
   const userId = useMemo(() => (isAuthenticated ? user?.id : undefined), [isAuthenticated, user?.id]);
   
+  // If showing duplicates, render only DuplicatesPage (no Tldraw)
+  if (showDuplicates) {
+    return (
+      <div style={{ position: "fixed", inset: 0 }}>
+        <DuplicatesPage onBack={() => setShowDuplicates(false)} />
+      </div>
+    );
+  }
+  
+  // Otherwise, render the normal Tldraw view
   return (
     <div style={{ position: "fixed", inset: 0 }}>
       {isAuthenticated && userId ? (
@@ -116,6 +129,7 @@ function AppContents() {
       <ConfigPanel />
       <SignInButton />
       {isAuthenticated && <SmartExplorer />}
+      {isAuthenticated && <UserMenu onViewDuplicates={() => setShowDuplicates(true)} />}
     </div>
   );
 }

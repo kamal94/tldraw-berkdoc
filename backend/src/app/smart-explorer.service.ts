@@ -3,6 +3,7 @@ import { EmbeddingService } from '../embedding/embedding.service';
 import { WeaviateService } from '../weaviate/weaviate.service';
 import { DocumentsService } from '../documents/documents.service';
 import { BoardsService } from '../boards/boards.service';
+import * as fs from 'fs';
 
 @Injectable()
 export class SmartExplorerService {
@@ -30,28 +31,26 @@ export class SmartExplorerService {
       // 1. Generate embedding from query
       const queryVector = await this.embeddingService.embed(query);
 
-      // 2. Search Weaviate for similar documents
-      const results = await this.weaviateService.searchSimilar(queryVector, userId, limit);
-
-      // 3. Extract unique documentIds from results
-      const documentScores = new Map<string, { score: number }>();
-
-      for (const result of results) {
-        const existing = documentScores.get(result.documentId);
-        if (!existing || result.score > existing.score) {
-          documentScores.set(result.documentId, {
-            score: result.score,
-          });
-        }
-      }
-
-      const documentIds = Array.from(documentScores.keys());
-      this.logger.log(`Found ${documentIds.length} unique documents`);
+      // 2. Search Weaviate for similar documents using document embeddings
+      const results = await this.weaviateService.searchSimilarDocuments(queryVector, userId, limit);
+      
+      // 3. Extract documentIds from results (already document-level, no need to group)
+      const documentIds = results.map((result) => result.documentId);
+      this.logger.log(`Found ${documentIds.length} documents`);
 
       if (documentIds.length === 0) {
         return { count: 0 };
       }
 
+      const documents: {documentId: string, title: string, score: number}[] = [];
+      for (const result of results) {
+        documents.push({
+          documentId: result.documentId,
+          title: result.title,
+          score: result.score,
+        });
+      }
+      fs.writeFileSync('results.json', JSON.stringify(documents, null, 2));
       // 4. Fetch full Document entities and add to board
       let addedCount = 0;
       for (const documentId of documentIds) {

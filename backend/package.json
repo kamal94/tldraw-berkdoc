@@ -10,7 +10,9 @@
     "lint": "bun x eslint src --ext .ts",
     "manage-data": "bun run scripts/manage-data.ts",
     "test": "bun test",
-    "test:llm": "bun test src/llm/llm.service.test.ts"
+    "test:llm": "bun test src/llm/llm.service.test.ts",
+    "test:duplicates": "bun test src/duplicates/duplicates.service.test.ts",
+    "test:duplicates:integration": "bun run src/duplicates/duplicates.integration.test.ts"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.14",
