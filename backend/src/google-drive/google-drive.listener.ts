@@ -91,14 +91,28 @@ export class GoogleDriveSyncListener {
           }
 
           this.logger.log(`Downloading and extracting text for ${file.name}...`);
-          const content = await this.googleDriveService.downloadAndExtractText(
-            userId,
-            file.id,
-            file.mimeType,
-          );
+          // Now returns both content and file metadata (permissions, revisions)
+          const { content, permissions, revisions } =
+            await this.googleDriveService.downloadAndExtractText(
+              userId,
+              file.id,
+              file.mimeType,
+            );
+
+          // Extract collaborators from permissions and revisions
+          const collaborators =
+            this.googleDriveService.extractCollaborators(permissions, revisions);
 
           if (existingDoc) {
             this.logger.log(`Updating existing document for ${file.name}`);
+
+            // Delete old collaborators and insert new ones
+            this.databaseService.deleteCollaboratorsByDocumentId(existingDoc.id);
+            this.databaseService.upsertCollaboratorsForDocument(
+              existingDoc.id,
+              collaborators,
+            );
+
             await this.documentsService.update(userId, existingDoc.id, {
               title: file.name,
               content,
@@ -107,7 +121,7 @@ export class GoogleDriveSyncListener {
             });
           } else {
             this.logger.log(`Creating new document for ${file.name}`);
-            await this.documentsService.create(userId, {
+            const document = await this.documentsService.create(userId, {
               title: file.name,
               content,
               url: file.webViewLink,
@@ -115,6 +129,12 @@ export class GoogleDriveSyncListener {
               googleFileId: file.id,
               googleModifiedTime: file.modifiedTime,
             });
+
+            // Store collaborators after document creation
+            this.databaseService.upsertCollaboratorsForDocument(
+              document.id,
+              collaborators,
+            );
           }
         } catch (error) {
           this.logger.error(`Failed to process file ${file.name} for user ${userId}`, error);

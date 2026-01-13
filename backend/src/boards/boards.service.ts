@@ -3,10 +3,11 @@ import { BoardsRoomManager } from './boards.room-manager';
 import { DatabaseService } from '../database/database.service';
 import type { Document } from '../documents/entities/document.entity';
 import type { Board } from './entities/board.entity';
-import type { DocumentShapeProps } from '../../../shared/document-shape.types';
+import type { DocumentShapeProps, DocumentSource } from '../../../shared/document-shape.types';
 import { TLBaseShape } from '@tldraw/tlschema';
 import { generateKeyBetween } from 'fractional-indexing';
 import type { RoomSnapshot } from '@tldraw/sync-core';
+import { validateShape } from './shape-validator.util';
 
 const CARD_WIDTH = 300;
 const CARD_HEIGHT = 140;
@@ -78,6 +79,14 @@ export class BoardsService {
       position,
       index
     );
+
+    // Validate the shape before adding it to the board
+    const validationResult = validateShape(documentShape);
+    this.logger.debug(`Validation result: ${JSON.stringify(validationResult, null, 2)}`);
+    if (!validationResult.valid) {
+      this.logger.error(`Shape validation failed for document ${document.id} (${document.title}): ${validationResult.error}`);
+      throw new Error(`Shape validation failed for document ${document.id} (${document.title}): ${validationResult.error}`);
+    }
 
     this.logger.debug(`Adding document shape ${shapeId} to user ${userId}'s board`);
     await room.updateStore((store) => {
@@ -175,6 +184,27 @@ export class BoardsService {
     position: { x: number; y: number },
     index: string
   ): TLBaseShape<'document', DocumentShapeProps> {
+    const props: DocumentShapeProps = {
+      w: CARD_WIDTH,
+      h: CARD_HEIGHT,
+      title: document.title,
+      url: document.url || '',
+      source: document.source ? (document.source as DocumentSource) : undefined,
+      contributors: document.collaborators?.map((c) => ({
+        email: c.email || '',
+        name: c.name,
+        avatarUrl: c.avatarUrl || '',
+        color: emailToColor(c.email || '')
+      })) || [],
+      tags: document.tags || [],
+      summary: document.summary || undefined,
+    };
+
+    // Serialize and deserialize props and meta to ensure they're JSON-serializable
+    // This is required by T.jsonValue validator
+    const serializedProps = JSON.parse(JSON.stringify(props));
+    const serializedMeta = JSON.parse(JSON.stringify({}));
+
     return {
       id: shapeId,
       typeName: 'shape',
@@ -186,17 +216,8 @@ export class BoardsService {
       parentId: pageId,
       isLocked: false,
       opacity: 1,
-      props: {
-        w: CARD_WIDTH,
-        h: CARD_HEIGHT,
-        title: document.title,
-        url: document.url || '',
-        source: document.source || null,
-        contributors: [],
-        tags: document.tags || [],
-        summary: document.summary || undefined,
-      } as DocumentShapeProps,
-      meta: {},
+      props: serializedProps,
+      meta: serializedMeta,
     } as TLBaseShape<'document', DocumentShapeProps>;
   }
 
@@ -229,3 +250,10 @@ export class BoardsService {
   }
 }
 
+function emailToColor(email: string): string {
+  const hash = email.split('').reduce((hash, char) => {
+    return ((hash << 5) - hash) + char.charCodeAt(0);
+  }, 0).toString(36).substring(0, 6);
+  const color = `#${hash.toString().padStart(6, '0')}`;
+  return color;
+}

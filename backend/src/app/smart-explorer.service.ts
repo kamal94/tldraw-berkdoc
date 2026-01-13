@@ -3,7 +3,6 @@ import { EmbeddingService } from '../embedding/embedding.service';
 import { WeaviateService } from '../weaviate/weaviate.service';
 import { DocumentsService } from '../documents/documents.service';
 import { BoardsService } from '../boards/boards.service';
-import * as fs from 'fs';
 
 @Injectable()
 export class SmartExplorerService {
@@ -18,7 +17,10 @@ export class SmartExplorerService {
 
   /**
    * Process smart explorer query: search for documents and add them to board
-   * @returns count of documents added
+   * @param userId - The user ID
+   * @param query - The search query
+   * @param limit - Maximum number of documents to return (default: 10)
+   * @returns count of documents added to the board
    */
   async processSmartExplorer(
     userId: string,
@@ -28,51 +30,71 @@ export class SmartExplorerService {
     this.logger.log(`Processing smart explorer for user ${userId}, query: "${query}"`);
 
     try {
-      // 1. Generate embedding from query
-      const queryVector = await this.embeddingService.embed(query);
+      const results = await this.searchSimilarDocuments(query, userId, limit);
 
-      // 2. Search Weaviate for similar documents using document embeddings
-      const results = await this.weaviateService.searchSimilarDocuments(queryVector, userId, limit);
-      
-      // 3. Extract documentIds from results (already document-level, no need to group)
-      const documentIds = results.map((result) => result.documentId);
-      this.logger.log(`Found ${documentIds.length} documents`);
-
-      if (documentIds.length === 0) {
+      if (results.length === 0) {
+        this.logger.log(`No documents found for query: "${query}"`);
         return { count: 0 };
       }
 
-      const documents: {documentId: string, title: string, score: number}[] = [];
-      for (const result of results) {
-        documents.push({
-          documentId: result.documentId,
-          title: result.title,
-          score: result.score,
-        });
-      }
-      fs.writeFileSync('results.json', JSON.stringify(documents, null, 2));
-      // 4. Fetch full Document entities and add to board
-      let addedCount = 0;
-      for (const documentId of documentIds) {
-        try {
-          const document = await this.documentsService.findOne(userId, documentId);
-          await this.boardsService.addDocumentShape(userId, document);
-          addedCount++;
-        } catch (error) {
-          // Log error but continue with other documents
-          this.logger.warn(
-            `Failed to add document ${documentId} to board: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-      }
-
+      const addedCount = await this.addDocumentsToBoard(userId, results);
       this.logger.log(`Added ${addedCount} documents to board for user ${userId}`);
       return { count: addedCount };
     } catch (error) {
-      this.logger.error(
-        `Error processing smart explorer for user ${userId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error processing smart explorer for user ${userId}: ${errorMessage}`);
       throw error;
     }
+  }
+
+  /**
+   * Search for similar documents using vector similarity
+   * @param query - The search query
+   * @param userId - The user ID
+   * @param limit - Maximum number of results
+   * @returns Array of search results with document IDs
+   */
+  private async searchSimilarDocuments(
+    query: string,
+    userId: string,
+    limit: number,
+  ) {
+    const queryVector = await this.embeddingService.embed(query);
+    const results = await this.weaviateService.searchSimilarDocuments(queryVector, userId, limit);
+    this.logger.log(`Found ${results.length} similar documents`);
+    return results;
+  }
+
+  /**
+   * Add documents to the user's board
+   * Shape validation happens automatically in addDocumentShape.
+   * If validation fails, a readable error message will be logged and the document will be skipped.
+   * @param userId - The user ID
+   * @param results - Array of search results containing document IDs
+   * @returns Number of documents successfully added
+   */
+  private async addDocumentsToBoard(
+    userId: string,
+    results: Array<{ documentId: string }>,
+  ): Promise<number> {
+    let addedCount = 0;
+
+    for (const result of results) {
+      try {
+        const document = await this.documentsService.findDocumentWithCollaboratorsById(
+          userId,
+          result.documentId,
+        );
+        await this.boardsService.addDocumentShape(userId, document);
+        addedCount++;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `Failed to add document ${result.documentId} to board: ${errorMessage}`,
+        );
+      }
+    }
+
+    return addedCount;
   }
 }

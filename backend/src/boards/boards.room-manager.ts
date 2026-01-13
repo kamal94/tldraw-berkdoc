@@ -26,6 +26,7 @@ const documentShapeProps = {
 			name: T.string,
 			avatarUrl: T.string.optional(),
 			color: T.string,
+      email: T.string.optional().nullable(),
 		})
 	),
 	tags: T.arrayOf(T.string),

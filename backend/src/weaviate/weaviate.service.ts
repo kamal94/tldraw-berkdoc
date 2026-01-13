@@ -445,6 +445,7 @@ export class WeaviateService implements OnModuleInit {
     const collection = this.client.collections.get(this.documentCollectionName);
     const result = await collection.query.nearVector(vector, {
       limit: 2000,
+      certainty: 0.6,
       returnMetadata: ['distance'],
       filters: collection.filter.byProperty('userId').equal(userId),
     });

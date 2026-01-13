@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { DatabaseService, type DocumentRow } from '../database/database.service';
+import { DatabaseService, type DocumentRow, type CollaboratorRow } from '../database/database.service';
 import type { Document } from './entities/document.entity';
 import type { CreateDocumentDto, UpdateDocumentDto } from './dto/document.dto';
 import {
@@ -78,6 +78,16 @@ export class DocumentsService {
     return this.rowToDocument(row);
   }
 
+  async findDocumentWithCollaboratorsById(userId: string, documentId: string): Promise<Document> {
+    const { document, collaborators } = this.databaseService.findDocumentWithCollaboratorsById(documentId);
+
+    if (!document || document.user_id !== userId) {
+      throw new NotFoundException('Document not found');
+    }
+
+    return this.rowToDocument(document, collaborators);
+  }
+
   async update(userId: string, documentId: string, dto: UpdateDocumentDto): Promise<Document> {
     const existing = await this.findOne(userId, documentId);
     const contentChanged = dto.content && dto.content !== existing.content;
@@ -134,7 +144,7 @@ export class DocumentsService {
       });
   }
 
-  private rowToDocument(row: DocumentRow): Document {
+  private rowToDocument(row: DocumentRow, collaborators?: CollaboratorRow[]): Document {
     return {
       id: row.id,
       title: row.title,
@@ -144,6 +154,14 @@ export class DocumentsService {
       userId: row.user_id,
       tags: row.tags ? JSON.parse(row.tags) : [],
       summary: row.summary || undefined,
+      collaborators: collaborators?.map((c) => ({
+        id: c.id,
+        email: c.email || undefined,
+        name: c.name,
+        avatarUrl: c.avatar_url || undefined,
+        source: c.source,
+        role: c.role || undefined,
+      })),
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
     };

@@ -3,6 +3,27 @@ import { ConfigService } from '@nestjs/config';
 import { google } from 'googleapis';
 import { DatabaseService } from '../database/database.service';
 import { PDFParse } from 'pdf-parse';
+import type { CollaboratorData } from './types/collaborator.types';
+
+export interface FileProcessingResult {
+  content: string;
+  permissions: Array<{
+    id?: string;
+    emailAddress?: string;
+    displayName?: string;
+    type?: string;
+    role?: string;
+    photoLink?: string;
+  }>;
+  revisions: Array<{
+    id?: string;
+    lastModifyingUser?: {
+      emailAddress?: string;
+      displayName?: string;
+      photoLink?: string;
+    };
+  }>;
+}
 
 @Injectable()
 export class GoogleDriveService {
@@ -25,9 +46,6 @@ export class GoogleDriveService {
       this.configService.get('GOOGLE_CALLBACK_URL'),
     );
 
-    this.logger.log("user.google_access_token:", user.google_access_token)
-    this.logger.log("user.google_refresh_token:", user.google_refresh_token)
-    this.logger.log("user.google_token_expiry:", user.google_token_expiry)
     oauth2Client.setCredentials({
       access_token: user.google_access_token,
       refresh_token: rowToNullable(user.google_refresh_token),
@@ -66,34 +84,147 @@ export class GoogleDriveService {
     };
   }
 
-  async downloadAndExtractText(userId: string, fileId: string, mimeType: string): Promise<string> {
+  async downloadAndExtractText(
+    userId: string,
+    fileId: string,
+    mimeType: string,
+  ): Promise<FileProcessingResult> {
     const drive = await this.getDriveClient(userId);
+
+    // Fetch permissions from files.get
+    const fileResponse = await drive.files.get({
+      fileId,
+      fields: 'permissions(id,emailAddress,displayName,type,role,photoLink)',
+    });
+
+    const permissions =
+      (fileResponse.data.permissions as FileProcessingResult['permissions']) ||
+      [];
+
+    // Fetch revisions separately using revisions.list
+    let revisions: FileProcessingResult['revisions'] = [];
+    try {
+      const revisionsResponse = await drive.revisions.list({
+        fileId,
+        fields: 'revisions(id,lastModifyingUser)',
+      });
+      revisions =
+        (revisionsResponse.data.revisions as FileProcessingResult['revisions']) ||
+        [];
+    } catch (error) {
+      // Some files may not have revisions accessible, log and continue
+      this.logger.warn(
+        `Could not fetch revisions for file ${fileId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
+    // Then extract content based on mimeType
+    let content: string;
 
     if (mimeType === 'application/vnd.google-apps.document') {
       // Export Google Doc as plain text
-      const response = await drive.files.export({
+      const exportResponse = await drive.files.export({
         fileId,
         mimeType: 'text/plain',
       });
-      return response.data as string;
+      content = exportResponse.data as string;
     } else if (mimeType === 'application/pdf') {
       // Download PDF as binary
-      const response = await drive.files.get(
+      const mediaResponse = await drive.files.get(
         { fileId, alt: 'media' },
         { responseType: 'arraybuffer' },
       );
 
-      const buffer = Buffer.from(response.data as ArrayBuffer);
+      const buffer = Buffer.from(mediaResponse.data as ArrayBuffer);
       const parser = new PDFParse({ data: buffer });
       try {
         const result = await parser.getText();
-        return result.text;
+        content = result.text;
       } finally {
         await parser.destroy();
       }
+    } else {
+      throw new Error(`Unsupported MIME type: ${mimeType}`);
     }
 
-    throw new Error(`Unsupported MIME type: ${mimeType}`);
+    return {
+      content,
+      permissions,
+      revisions,
+    };
+  }
+
+  extractCollaborators(
+    permissions: FileProcessingResult['permissions'],
+    revisions: FileProcessingResult['revisions'],
+  ): CollaboratorData[] {
+    const collaboratorMap = new Map<string, CollaboratorData>();
+
+    // Extract from permissions
+    for (const perm of permissions) {
+      if (perm.type === 'user') {
+        if (perm.emailAddress) {
+          collaboratorMap.set(perm.emailAddress.toLowerCase(), {
+            email: perm.emailAddress,
+            name: perm.displayName || perm.emailAddress.split('@')[0],
+            avatarUrl: perm.photoLink,
+            source: 'permissions',
+            role: perm.role,
+          });
+        } else if (perm.displayName) {
+          // Handle case where we only have a name (no email) from permissions
+          const nameKey = perm.displayName.toLowerCase();
+          if (
+            !Array.from(collaboratorMap.values()).some(
+              (c) => c.name.toLowerCase() === nameKey,
+            )
+          ) {
+            collaboratorMap.set(`name_${nameKey}`, {
+              name: perm.displayName,
+              avatarUrl: perm.photoLink,
+              source: 'permissions',
+              role: perm.role,
+            });
+          }
+        }
+      }
+    }
+
+    // Extract from revisions (may override/update existing entries)
+    for (const rev of revisions) {
+      const user = rev.lastModifyingUser;
+      if (user?.emailAddress) {
+        const email = user.emailAddress.toLowerCase();
+        const existing = collaboratorMap.get(email);
+        collaboratorMap.set(email, {
+          email: user.emailAddress,
+          name:
+            user.displayName ||
+            existing?.name ||
+            user.emailAddress.split('@')[0],
+          avatarUrl: user.photoLink || existing?.avatarUrl,
+          source: existing ? 'both' : 'revisions',
+          role: existing?.role,
+        });
+      } else if (user?.displayName) {
+        // Handle case where we only have a name (no email) from revisions
+        // Only add if we don't already have this person from permissions
+        const nameKey = user.displayName.toLowerCase();
+        if (
+          !Array.from(collaboratorMap.values()).some(
+            (c) => c.name.toLowerCase() === nameKey,
+          )
+        ) {
+          collaboratorMap.set(`name_${nameKey}`, {
+            name: user.displayName,
+            avatarUrl: user.photoLink,
+            source: 'revisions',
+          });
+        }
+      }
+    }
+
+    return Array.from(collaboratorMap.values());
   }
 }
 

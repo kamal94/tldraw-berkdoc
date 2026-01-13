@@ -14,6 +14,7 @@ export type DocumentSource =
 
 // Contributor type for the shape
 export interface Contributor {
+  email: string;
   name: string;
   avatarUrl?: string;
   color: string;

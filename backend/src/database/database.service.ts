@@ -142,6 +142,23 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       )
     `);
 
+    // Collaborators table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS collaborators (
+        id TEXT PRIMARY KEY,
+        document_id TEXT NOT NULL,
+        email TEXT,
+        name TEXT NOT NULL,
+        avatar_url TEXT,
+        source TEXT NOT NULL,
+        role TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+        UNIQUE(document_id, email)
+      )
+    `);
+
     // Create indexes
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
@@ -152,6 +169,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       CREATE INDEX IF NOT EXISTS idx_duplicates_user_id ON document_duplicates(user_id);
       CREATE INDEX IF NOT EXISTS idx_duplicates_source_document_id ON document_duplicates(source_document_id);
       CREATE INDEX IF NOT EXISTS idx_duplicates_target_document_id ON document_duplicates(target_document_id);
+      CREATE INDEX IF NOT EXISTS idx_collaborators_document_id ON collaborators(document_id);
     `);
 
     this.logger.log('Database tables initialized');
@@ -304,6 +322,84 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   findDocumentById(id: string): DocumentRow | null {
     const stmt = this.db.prepare('SELECT * FROM documents WHERE id = ?');
     return stmt.get(id) as DocumentRow | null;
+  }
+
+  findDocumentWithCollaboratorsById(id: string): {
+    document: DocumentRow | null;
+    collaborators: CollaboratorRow[];
+  } {
+    // Fetch document and collaborators in a single efficient query using LEFT JOIN
+    // This is performant because:
+    // 1. We use the primary key index on documents.id
+    // 2. We use the index on collaborators.document_id
+    // 3. Single query reduces round trips
+    const stmt = this.db.prepare(`
+      SELECT 
+        d.*,
+        c.id as collaborator_id,
+        c.email as collaborator_email,
+        c.name as collaborator_name,
+        c.avatar_url as collaborator_avatar_url,
+        c.source as collaborator_source,
+        c.role as collaborator_role,
+        c.created_at as collaborator_created_at,
+        c.updated_at as collaborator_updated_at
+      FROM documents d
+      LEFT JOIN collaborators c ON d.id = c.document_id
+      WHERE d.id = ?
+      ORDER BY c.name ASC
+    `);
+    
+    const rows = stmt.all(id) as Array<
+      DocumentRow & {
+        collaborator_id: string | null;
+        collaborator_email: string | null;
+        collaborator_name: string | null;
+        collaborator_avatar_url: string | null;
+        collaborator_source: string | null;
+        collaborator_role: string | null;
+        collaborator_created_at: string | null;
+        collaborator_updated_at: string | null;
+      }
+    >;
+
+    if (rows.length === 0) {
+      return { document: null, collaborators: [] };
+    }
+
+    // Extract document (same for all rows)
+    const firstRow = rows[0];
+    const document: DocumentRow = {
+      id: firstRow.id,
+      title: firstRow.title,
+      content: firstRow.content,
+      url: firstRow.url,
+      source: firstRow.source,
+      user_id: firstRow.user_id,
+      tags: firstRow.tags,
+      google_file_id: firstRow.google_file_id,
+      google_modified_time: firstRow.google_modified_time,
+      summary: firstRow.summary,
+      created_at: firstRow.created_at,
+      updated_at: firstRow.updated_at,
+    };
+
+    // Extract collaborators (filter out nulls)
+    const collaborators: CollaboratorRow[] = rows
+      .filter((row) => row.collaborator_id !== null)
+      .map((row) => ({
+        id: row.collaborator_id!,
+        document_id: document.id,
+        email: row.collaborator_email,
+        name: row.collaborator_name!,
+        avatar_url: row.collaborator_avatar_url,
+        source: row.collaborator_source!,
+        role: row.collaborator_role,
+        created_at: row.collaborator_created_at!,
+        updated_at: row.collaborator_updated_at!,
+      }));
+
+    return { document, collaborators };
   }
 
   findDocumentsByUserId(userId: string): DocumentRow[] {
@@ -506,6 +602,81 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   clearAllDuplicates() {
     this.db.exec('DELETE FROM document_duplicates');
   }
+
+  // Collaborator operations
+  createCollaborator(collaborator: {
+    id: string;
+    documentId: string;
+    email?: string;
+    name: string;
+    avatarUrl?: string;
+    source: string;
+    role?: string;
+  }) {
+    const stmt = this.db.prepare(`
+      INSERT INTO collaborators (
+        id, document_id, email, name, avatar_url, source, role,
+        created_at, updated_at
+      )
+      VALUES (
+        $id, $documentId, $email, $name, $avatarUrl, $source, $role,
+        $createdAt, $updatedAt
+      )
+    `);
+
+    const now = new Date().toISOString();
+    stmt.run({
+      $id: collaborator.id,
+      $documentId: collaborator.documentId,
+      $email: collaborator.email || null,
+      $name: collaborator.name,
+      $avatarUrl: collaborator.avatarUrl || null,
+      $source: collaborator.source,
+      $role: collaborator.role || null,
+      $createdAt: now,
+      $updatedAt: now,
+    });
+  }
+
+  findCollaboratorsByDocumentId(documentId: string): CollaboratorRow[] {
+    const stmt = this.db.prepare(
+      'SELECT * FROM collaborators WHERE document_id = ? ORDER BY name ASC',
+    );
+    return stmt.all(documentId) as CollaboratorRow[];
+  }
+
+  deleteCollaboratorsByDocumentId(documentId: string) {
+    const stmt = this.db.prepare('DELETE FROM collaborators WHERE document_id = ?');
+    stmt.run(documentId);
+  }
+
+  upsertCollaboratorsForDocument(
+    documentId: string,
+    collaborators: Array<{
+      email?: string;
+      name: string;
+      avatarUrl?: string;
+      source: string;
+      role?: string;
+    }>,
+  ) {
+    // Delete existing collaborators for this document
+    this.deleteCollaboratorsByDocumentId(documentId);
+
+    // Insert new collaborators
+    for (const collaborator of collaborators) {
+      const id = `collab_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      this.createCollaborator({
+        id,
+        documentId,
+        email: collaborator.email,
+        name: collaborator.name,
+        avatarUrl: collaborator.avatarUrl,
+        source: collaborator.source,
+        role: collaborator.role,
+      });
+    }
+  }
 }
 
 // Row types for SQLite results
@@ -557,6 +728,18 @@ export interface DuplicateRow {
   target_chunk_index: number | null;
   similarity_score: number;
   duplicate_type: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CollaboratorRow {
+  id: string;
+  document_id: string;
+  email: string | null;
+  name: string;
+  avatar_url: string | null;
+  source: string;
+  role: string | null;
   created_at: string;
   updated_at: string;
 }

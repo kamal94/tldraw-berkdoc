@@ -9,6 +9,8 @@
     "build": "nest build",
     "lint": "bun x eslint src --ext .ts",
     "manage-data": "bun run scripts/manage-data.ts",
+    "test:collaborators": "bun run scripts/test-collaborators.ts",
+    "backfill:collaborators": "bun run scripts/backfill-collaborators.ts",
     "test": "bun test",
     "test:llm": "bun test src/llm/llm.service.test.ts",
     "test:duplicates": "bun test src/duplicates/duplicates.service.test.ts",
