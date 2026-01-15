@@ -13,6 +13,7 @@ import { QueueModule } from './queue/queue.module';
 import { BoardsModule } from './boards/boards.module';
 import { AppModule as AppCommunicationModule } from './app/app.module';
 import { DuplicatesModule } from './duplicates/duplicates.module';
+import { AvatarsModule } from './avatars/avatars.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { DuplicatesModule } from './duplicates/duplicates.module';
     BoardsModule,
     AppCommunicationModule,
     DuplicatesModule,
+    AvatarsModule,
   ],
 })
 export class AppModule {}

@@ -2,11 +2,24 @@ import { useState, useMemo } from "react";
 import { HTMLContainer } from "tldraw";
 import { SourceIcon, ExternalLinkIcon } from "./SourceIcon";
 import { useAnimation } from "../contexts/AnimationContext";
+import { useCachedAvatarUrl } from "../hooks/useCachedAvatarUrl";
 import type { DocumentShape } from "./DocumentShape";
 import type { Contributor } from "@shared/document-shape.types";
 
 // Number of tags to show before collapsing
 const VISIBLE_TAGS_COUNT = 2;
+
+/**
+ * Generate user initials from name
+ */
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+}
 
 // Tag pill component
 function TagPill({ tag }: { tag: string }) {
@@ -142,12 +155,8 @@ function ContributorAvatar({
   contributor: Contributor;
   index: number;
 }) {
-  const initials = contributor.name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+  const initials = getInitials(contributor.name);
+  const avatarUrl = useCachedAvatarUrl(contributor.avatarUrl);
 
   return (
     <div
@@ -168,9 +177,9 @@ function ContributorAvatar({
       }}
       title={contributor.name}
     >
-      {contributor.avatarUrl ? (
+      {avatarUrl ? (
         <img
-          src={contributor.avatarUrl}
+          src={avatarUrl}
           alt={contributor.name}
           style={{
             width: "100%",

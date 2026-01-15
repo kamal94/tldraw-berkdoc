@@ -31,7 +31,17 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   }
 
   private createTables() {
-    // Users table
+    this.createUsersTable();
+    this.createDocumentsTable();
+    this.createBoardsTable();
+    this.createDocumentDuplicatesTable();
+    this.createCollaboratorsTable();
+    this.createAvatarCacheTable();
+    this.createIndexes();
+    this.logger.log('Database tables initialized');
+  }
+
+  private createUsersTable() {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
@@ -49,19 +59,28 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       )
     `);
 
-    // Ensure new user columns exist
-    const userCols = this.db.query("PRAGMA table_info(users)").all() as { name: string }[];
-    if (!userCols.find(c => c.name === 'google_access_token')) {
-      this.db.exec("ALTER TABLE users ADD COLUMN google_access_token TEXT");
-    }
-    if (!userCols.find(c => c.name === 'google_refresh_token')) {
-      this.db.exec("ALTER TABLE users ADD COLUMN google_refresh_token TEXT");
-    }
-    if (!userCols.find(c => c.name === 'google_token_expiry')) {
-      this.db.exec("ALTER TABLE users ADD COLUMN google_token_expiry INTEGER");
-    }
+    this.migrateUsersTable();
+  }
 
-    // Documents table
+  private migrateUsersTable() {
+    const userCols = this.db
+      .query('PRAGMA table_info(users)')
+      .all() as { name: string }[];
+
+    const columnNames = userCols.map((c) => c.name);
+
+    if (!columnNames.includes('google_access_token')) {
+      this.db.exec('ALTER TABLE users ADD COLUMN google_access_token TEXT');
+    }
+    if (!columnNames.includes('google_refresh_token')) {
+      this.db.exec('ALTER TABLE users ADD COLUMN google_refresh_token TEXT');
+    }
+    if (!columnNames.includes('google_token_expiry')) {
+      this.db.exec('ALTER TABLE users ADD COLUMN google_token_expiry INTEGER');
+    }
+  }
+
+  private createDocumentsTable() {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS documents (
         id TEXT PRIMARY KEY,
@@ -80,30 +99,39 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       )
     `);
 
-    // Ensure new document columns exist
-    const docCols = this.db.query("PRAGMA table_info(documents)").all() as { name: string }[];
-    if (!docCols.find(c => c.name === 'google_file_id')) {
-      this.db.exec("ALTER TABLE documents ADD COLUMN google_file_id TEXT");
-      // Need to add UNIQUE separately in SQLite if desired, but index can handle it
+    this.migrateDocumentsTable();
+  }
+
+  private migrateDocumentsTable() {
+    const docCols = this.db
+      .query('PRAGMA table_info(documents)')
+      .all() as { name: string }[];
+
+    const columnNames = docCols.map((c) => c.name);
+
+    if (!columnNames.includes('google_file_id')) {
+      this.db.exec('ALTER TABLE documents ADD COLUMN google_file_id TEXT');
     }
-    if (!docCols.find(c => c.name === 'google_modified_time')) {
-      this.db.exec("ALTER TABLE documents ADD COLUMN google_modified_time TEXT");
+    if (!columnNames.includes('google_modified_time')) {
+      this.db.exec('ALTER TABLE documents ADD COLUMN google_modified_time TEXT');
     }
-    if (!docCols.find(c => c.name === 'summary')) {
-      this.db.exec("ALTER TABLE documents ADD COLUMN summary TEXT");
+    if (!columnNames.includes('summary')) {
+      this.db.exec('ALTER TABLE documents ADD COLUMN summary TEXT');
     }
-    if (!docCols.find(c => c.name === 'tags')) {
-      this.db.exec("ALTER TABLE documents ADD COLUMN tags TEXT");
-    }
-    
-    // Migrate dimensions to tags if dimensions column exists
-    if (docCols.find(c => c.name === 'dimensions')) {
-      this.logger.log('Migrating dimensions to tags...');
-      this.db.exec("UPDATE documents SET tags = dimensions WHERE tags IS NULL AND dimensions IS NOT NULL");
-      // Note: We keep the dimensions column for backward compatibility but stop using it
+    if (!columnNames.includes('tags')) {
+      this.db.exec('ALTER TABLE documents ADD COLUMN tags TEXT');
     }
 
-    // Boards table
+    // Migrate dimensions to tags if dimensions column exists
+    if (columnNames.includes('dimensions')) {
+      this.logger.log('Migrating dimensions to tags...');
+      this.db.exec(
+        'UPDATE documents SET tags = dimensions WHERE tags IS NULL AND dimensions IS NOT NULL',
+      );
+    }
+  }
+
+  private createBoardsTable() {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS boards (
         id TEXT PRIMARY KEY,
@@ -116,14 +144,25 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       )
     `);
 
-    // Ensure name column exists (migration for existing databases)
-    const boardCols = this.db.query("PRAGMA table_info(boards)").all() as { name: string }[];
-    if (!boardCols.find(c => c.name === 'name')) {
-      this.db.exec("ALTER TABLE boards ADD COLUMN name TEXT NOT NULL DEFAULT 'My Board'");
+    this.migrateBoardsTable();
+  }
+
+  private migrateBoardsTable() {
+    const boardCols = this.db
+      .query('PRAGMA table_info(boards)')
+      .all() as { name: string }[];
+
+    const columnNames = boardCols.map((c) => c.name);
+
+    if (!columnNames.includes('name')) {
+      this.db.exec(
+        "ALTER TABLE boards ADD COLUMN name TEXT NOT NULL DEFAULT 'My Board'",
+      );
       this.logger.log('Added name column to boards table');
     }
+  }
 
-    // Document duplicates table
+  private createDocumentDuplicatesTable() {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS document_duplicates (
         id TEXT PRIMARY KEY,
@@ -141,8 +180,9 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         FOREIGN KEY (target_document_id) REFERENCES documents(id)
       )
     `);
+  }
 
-    // Collaborators table
+  private createCollaboratorsTable() {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS collaborators (
         id TEXT PRIMARY KEY,
@@ -158,8 +198,21 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         UNIQUE(document_id, email)
       )
     `);
+  }
 
-    // Create indexes
+  private createAvatarCacheTable() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS avatar_cache (
+        hash TEXT PRIMARY KEY,
+        content_type TEXT NOT NULL,
+        data BLOB NOT NULL,
+        original_url TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    `);
+  }
+
+  private createIndexes() {
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
       CREATE INDEX IF NOT EXISTS idx_users_provider_id ON users(provider_id);
@@ -171,8 +224,6 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       CREATE INDEX IF NOT EXISTS idx_duplicates_target_document_id ON document_duplicates(target_document_id);
       CREATE INDEX IF NOT EXISTS idx_collaborators_document_id ON collaborators(document_id);
     `);
-
-    this.logger.log('Database tables initialized');
   }
 
   getDatabase(): Database {

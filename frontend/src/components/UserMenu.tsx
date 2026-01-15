@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
+import { useCachedAvatarUrl } from '../hooks/useCachedAvatarUrl';
 
 interface UserMenuProps {
   onViewDuplicates?: () => void;
@@ -9,6 +10,11 @@ export function UserMenu({ onViewDuplicates }: UserMenuProps) {
   const { user, logout } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Convert Google avatar URL to backend cached URL
+  // Don't use original Google URL directly to prevent API rate limiting
+  // Must call hook before early return
+  const avatarUrl = useCachedAvatarUrl(user?.avatarUrl);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -24,12 +30,16 @@ export function UserMenu({ onViewDuplicates }: UserMenuProps) {
 
   if (!user) return null;
 
-  const initials = user.name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
+  const getInitials = (name: string): string => {
+    return name
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  const initials = getInitials(user.name);
 
   return (
     <div
@@ -42,9 +52,9 @@ export function UserMenu({ onViewDuplicates }: UserMenuProps) {
         onClick={() => setIsOpen(!isOpen)}
         className="relative w-9 h-9 rounded-full overflow-hidden border-2 border-white shadow-lg hover:shadow-xl transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
       >
-        {user.avatarUrl ? (
+        {avatarUrl ? (
           <img
-            src={user.avatarUrl}
+            src={avatarUrl}
             alt={user.name}
             className="w-full h-full object-cover"
           />
@@ -61,9 +71,9 @@ export function UserMenu({ onViewDuplicates }: UserMenuProps) {
           {/* User Info */}
           <div className="p-4 border-b border-gray-100">
             <div className="flex items-center gap-3">
-              {user.avatarUrl ? (
+              {avatarUrl ? (
                 <img
-                  src={user.avatarUrl}
+                  src={avatarUrl}
                   alt={user.name}
                   className="w-10 h-10 rounded-full"
                 />
