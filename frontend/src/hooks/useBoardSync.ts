@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useSync } from "@tldraw/sync";
-import type { TLStoreWithStatus, TLAsset, TLAssetContext } from "tldraw";
+import type { TLStoreWithStatus, TLAsset, TLAssetContext, TLUserPreferences } from "tldraw";
 import { defaultShapeUtils, defaultBindingUtils } from "tldraw";
 import { DocumentShapeUtil } from "../shapes/DocumentShape";
 
@@ -19,9 +19,11 @@ function getAuthToken(): string | null {
  * Returns null when not authenticated (use localStorage persistence instead).
  *
  * @param userId - The authenticated user's ID (undefined if not authenticated)
+ * @param userInfo - The user preferences/info to pass to sync (optional)
  */
 export function useBoardSync(
-  userId: string | undefined
+  userId: string | undefined,
+  userInfo?: Pick<TLUserPreferences, 'id' | 'name' | 'color' | 'colorScheme'>
 ): TLStoreWithStatus | null {
   // Build the WebSocket URI with auth token - memoize based on userId
   const uri = useMemo(() => {
@@ -73,8 +75,9 @@ export function useBoardSync(
       shapeUtils,
       bindingUtils,
       assets,
+      ...(userInfo && { userInfo }),
     }),
-    [uri, shapeUtils, bindingUtils, assets]
+    [uri, shapeUtils, bindingUtils, assets, userInfo]
   );
 
   // Call useSync with the config

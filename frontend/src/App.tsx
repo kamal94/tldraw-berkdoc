@@ -1,6 +1,6 @@
 // ALWAYS KEEP THIS FILE AS SIMPLE AS POSSIBLE. DO NOT FILL IT WITH IMPLEMENTATION DETAILS.
 import { useMemo, useState } from "react";
-import { Tldraw, type TLComponents } from "tldraw";
+import { Tldraw, type TLComponents, useTldrawUser, type TLUserPreferences } from "tldraw";
 import "tldraw/tldraw.css";
 import { DocumentShapeUtil } from "./shapes/DocumentShape";
 import { AnimationProvider } from "./contexts/AnimationProvider";
@@ -18,9 +18,23 @@ import { useBoardSync } from "./hooks/useBoardSync";
 const customShapeUtils = [DocumentShapeUtil];
 
 // Component for authenticated users - uses sync
-function AuthenticatedTldraw({ userId, components }: { userId: string; components: TLComponents }) {
+function AuthenticatedTldraw({ userId, userName, components }: { userId: string; userName: string; components: TLComponents }) {
+  // Create user preferences for tldraw presence
+  const [userPreferences, setUserPreferences] = useState<TLUserPreferences>(() => {
+    return {
+      id: userId,
+      name: userName,
+      color: '#1a73e8', // Same blue as app's primary color
+      colorScheme: 'light',
+    };
+  });
+
   // Hooks must be called before any early returns
-  const syncStore = useBoardSync(userId);
+  // Pass userInfo to sync (subset of userPreferences as per tutorial)
+  const syncStore = useBoardSync(userId, userPreferences);
+
+  // Create TLUser object using useTldrawUser hook
+  const user = useTldrawUser({ userPreferences, setUserPreferences });
 
   // Check if token exists - show error if missing
   const token = localStorage.getItem("auth_token");
@@ -71,6 +85,7 @@ function AuthenticatedTldraw({ userId, components }: { userId: string; component
         store={syncStore}
         shapeUtils={customShapeUtils}
         components={components}
+        user={user}
         options={{
           maxShapesPerPage: 100 * 1000,
         }}
@@ -129,8 +144,8 @@ function AppContents() {
   // Otherwise, render the normal Tldraw view
   return (
     <div style={{ position: "fixed", inset: 0 }}>
-      {isAuthenticated && userId ? (
-        <AuthenticatedTldraw userId={userId} components={components} />
+      {isAuthenticated && userId && user ? (
+        <AuthenticatedTldraw userId={userId} userName={user.name} components={components} />
       ) : (
         <GuestTldraw components={components} />
       )}
