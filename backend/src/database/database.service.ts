@@ -2,6 +2,7 @@ import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/commo
 import { Database } from 'bun:sqlite';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getMimeTypeDisplayName, classifyMimeType } from '../onboarding/mime-types';
 
 @Injectable()
 export class DatabaseService implements OnModuleInit, OnModuleDestroy {
@@ -37,6 +38,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     this.createDocumentDuplicatesTable();
     this.createCollaboratorsTable();
     this.createAvatarCacheTable();
+    this.createOnboardingTable();
     this.createIndexes();
     this.logger.log('Database tables initialized');
   }
@@ -93,6 +95,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         google_file_id TEXT UNIQUE,
         google_modified_time TEXT,
         summary TEXT,
+        metadata_last_extracted TEXT,
+        content_last_analyzed TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY (user_id) REFERENCES users(id)
@@ -120,6 +124,26 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     }
     if (!columnNames.includes('tags')) {
       this.db.exec('ALTER TABLE documents ADD COLUMN tags TEXT');
+    }
+    if (!columnNames.includes('metadata_last_extracted')) {
+      this.db.exec('ALTER TABLE documents ADD COLUMN metadata_last_extracted TEXT');
+      this.logger.log('Added metadata_last_extracted column to documents table');
+    }
+    if (!columnNames.includes('content_last_analyzed')) {
+      this.db.exec('ALTER TABLE documents ADD COLUMN content_last_analyzed TEXT');
+      this.logger.log('Added content_last_analyzed column to documents table');
+    }
+    if (!columnNames.includes('mime_type')) {
+      this.db.exec('ALTER TABLE documents ADD COLUMN mime_type TEXT');
+      this.logger.log('Added mime_type column to documents table');
+    }
+    if (!columnNames.includes('mime_type_classification')) {
+      this.db.exec('ALTER TABLE documents ADD COLUMN mime_type_classification TEXT');
+      this.logger.log('Added mime_type_classification column to documents table');
+    }
+    if (!columnNames.includes('size_bytes')) {
+      this.db.exec('ALTER TABLE documents ADD COLUMN size_bytes INTEGER');
+      this.logger.log('Added size_bytes column to documents table');
     }
 
     // Migrate dimensions to tags if dimensions column exists
@@ -212,6 +236,69 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     `);
   }
 
+  private createOnboardingTable() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS onboarding (
+        id TEXT PRIMARY KEY,
+        user_id TEXT UNIQUE NOT NULL,
+        
+        -- Step 1: OAuth connection
+        drive_connected_at TEXT,
+        
+        -- Step 2: Metadata snapshot
+        metadata_scan_started_at TEXT,
+        metadata_scan_completed_at TEXT,
+        metadata_files_scanned INTEGER DEFAULT 0,
+        total_file_count INTEGER,
+        total_size_bytes INTEGER,
+        folder_count INTEGER,
+        supported_file_count INTEGER,
+        supported_size_bytes INTEGER,
+        unsupported_file_count INTEGER,
+        shared_doc_count INTEGER,
+        unique_collaborator_count INTEGER,
+        review_completed_at TEXT,
+        
+        -- Step 3: Processing confirmation
+        processing_confirmed_at TEXT,
+        processing_options TEXT,
+        
+        -- Step 4: Processing progress
+        processing_started_at TEXT,
+        processing_completed_at TEXT,
+        files_processed INTEGER DEFAULT 0,
+        files_total INTEGER DEFAULT 0,
+        
+        -- Telemetry
+        estimated_cost_usd REAL,
+        actual_cost_usd REAL,
+        
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      )
+    `);
+
+    this.migrateOnboardingTable();
+  }
+
+  private migrateOnboardingTable() {
+    const onboardingCols = this.db
+      .query('PRAGMA table_info(onboarding)')
+      .all() as { name: string }[];
+
+    const columnNames = onboardingCols.map((c) => c.name);
+
+    if (!columnNames.includes('metadata_files_scanned')) {
+      this.db.exec('ALTER TABLE onboarding ADD COLUMN metadata_files_scanned INTEGER DEFAULT 0');
+      this.logger.log('Added metadata_files_scanned column to onboarding table');
+    }
+    if (!columnNames.includes('review_completed_at')) {
+      this.db.exec('ALTER TABLE onboarding ADD COLUMN review_completed_at TEXT');
+      this.logger.log('Added review_completed_at column to onboarding table');
+    }
+  }
+
   private createIndexes() {
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
@@ -223,6 +310,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       CREATE INDEX IF NOT EXISTS idx_duplicates_source_document_id ON document_duplicates(source_document_id);
       CREATE INDEX IF NOT EXISTS idx_duplicates_target_document_id ON document_duplicates(target_document_id);
       CREATE INDEX IF NOT EXISTS idx_collaborators_document_id ON collaborators(document_id);
+      CREATE INDEX IF NOT EXISTS idx_onboarding_user_id ON onboarding(user_id);
     `);
   }
 
@@ -342,18 +430,23 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     googleModifiedTime?: string;
     summary?: string;
   }) {
+    const now = new Date().toISOString();
+    // Set content_last_analyzed if content is provided (not empty)
+    const contentAnalyzed = doc.content && doc.content.trim().length > 0 ? now : null;
+
     const stmt = this.db.prepare(`
       INSERT INTO documents (
         id, title, content, url, source, user_id, tags,
-        google_file_id, google_modified_time, summary, created_at, updated_at
+        google_file_id, google_modified_time, summary,
+        content_last_analyzed, created_at, updated_at
       )
       VALUES (
         $id, $title, $content, $url, $source, $userId, $tags,
-        $googleFileId, $googleModifiedTime, $summary, $createdAt, $updatedAt
+        $googleFileId, $googleModifiedTime, $summary,
+        $contentAnalyzed, $createdAt, $updatedAt
       )
     `);
 
-    const now = new Date().toISOString();
     stmt.run({
       $id: doc.id,
       $title: doc.title,
@@ -365,6 +458,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       $googleFileId: doc.googleFileId || null,
       $googleModifiedTime: doc.googleModifiedTime || null,
       $summary: doc.summary || null,
+      $contentAnalyzed: contentAnalyzed,
       $createdAt: now,
       $updatedAt: now,
     });
@@ -431,6 +525,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       google_file_id: firstRow.google_file_id,
       google_modified_time: firstRow.google_modified_time,
       summary: firstRow.summary,
+      metadata_last_extracted: firstRow.metadata_last_extracted,
+      content_last_analyzed: firstRow.content_last_analyzed,
+      mime_type: firstRow.mime_type ?? null,
+      mime_type_classification: firstRow.mime_type_classification ?? null,
       created_at: firstRow.created_at,
       updated_at: firstRow.updated_at,
     };
@@ -479,6 +577,9 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     },
   ) {
     const now = new Date().toISOString();
+    
+    // Set content_last_analyzed if content is being updated and is not empty
+    const contentAnalyzed = updates.content && updates.content.trim().length > 0 ? now : null;
 
     // Build update dynamically but execute with full parameter set
     const stmt = this.db.prepare(`
@@ -491,6 +592,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         google_file_id = COALESCE($googleFileId, google_file_id),
         google_modified_time = COALESCE($googleModifiedTime, google_modified_time),
         summary = COALESCE($summary, summary),
+        content_last_analyzed = COALESCE($contentAnalyzed, content_last_analyzed),
         updated_at = $updatedAt
       WHERE id = $id
     `);
@@ -505,6 +607,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       $googleFileId: updates.googleFileId ?? null,
       $googleModifiedTime: updates.googleModifiedTime ?? null,
       $summary: updates.summary ?? null,
+      $contentAnalyzed: contentAnalyzed,
       $updatedAt: now,
     });
   }
@@ -728,6 +831,348 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       });
     }
   }
+
+  // Onboarding operations
+  createOnboarding(onboarding: { id: string; userId: string; driveConnectedAt?: string }) {
+    const stmt = this.db.prepare(`
+      INSERT INTO onboarding (id, user_id, drive_connected_at, created_at, updated_at)
+      VALUES ($id, $userId, $driveConnectedAt, $createdAt, $updatedAt)
+    `);
+
+    const now = new Date().toISOString();
+    stmt.run({
+      $id: onboarding.id,
+      $userId: onboarding.userId,
+      $driveConnectedAt: onboarding.driveConnectedAt || now,
+      $createdAt: now,
+      $updatedAt: now,
+    });
+  }
+
+  findOnboardingByUserId(userId: string): OnboardingRow | null {
+    const stmt = this.db.prepare('SELECT * FROM onboarding WHERE user_id = ?');
+    return stmt.get(userId) as OnboardingRow | null;
+  }
+
+  findOnboardingById(id: string): OnboardingRow | null {
+    const stmt = this.db.prepare('SELECT * FROM onboarding WHERE id = ?');
+    return stmt.get(id) as OnboardingRow | null;
+  }
+
+  updateOnboarding(
+    userId: string,
+    updates: {
+      driveConnectedAt?: string;
+      metadataScanStartedAt?: string;
+      metadataScanCompletedAt?: string;
+      totalFileCount?: number;
+      totalSizeBytes?: number;
+      folderCount?: number;
+      supportedFileCount?: number;
+      supportedSizeBytes?: number;
+      unsupportedFileCount?: number;
+      sharedDocCount?: number;
+      uniqueCollaboratorCount?: number;
+      reviewCompletedAt?: string;
+      processingConfirmedAt?: string;
+      processingOptions?: { prioritizeShared?: boolean; prioritizeRecent?: boolean; skipDrafts?: boolean };
+      processingStartedAt?: string;
+      processingCompletedAt?: string;
+      filesProcessed?: number;
+      filesTotal?: number;
+      estimatedCostUsd?: number;
+      actualCostUsd?: number;
+    },
+  ) {
+    const now = new Date().toISOString();
+
+    const stmt = this.db.prepare(`
+      UPDATE onboarding SET
+        drive_connected_at = COALESCE($driveConnectedAt, drive_connected_at),
+        metadata_scan_started_at = COALESCE($metadataScanStartedAt, metadata_scan_started_at),
+        metadata_scan_completed_at = COALESCE($metadataScanCompletedAt, metadata_scan_completed_at),
+        total_file_count = COALESCE($totalFileCount, total_file_count),
+        total_size_bytes = COALESCE($totalSizeBytes, total_size_bytes),
+        folder_count = COALESCE($folderCount, folder_count),
+        supported_file_count = COALESCE($supportedFileCount, supported_file_count),
+        supported_size_bytes = COALESCE($supportedSizeBytes, supported_size_bytes),
+        unsupported_file_count = COALESCE($unsupportedFileCount, unsupported_file_count),
+        shared_doc_count = COALESCE($sharedDocCount, shared_doc_count),
+        unique_collaborator_count = COALESCE($uniqueCollaboratorCount, unique_collaborator_count),
+        review_completed_at = COALESCE($reviewCompletedAt, review_completed_at),
+        processing_confirmed_at = COALESCE($processingConfirmedAt, processing_confirmed_at),
+        processing_options = COALESCE($processingOptions, processing_options),
+        processing_started_at = COALESCE($processingStartedAt, processing_started_at),
+        processing_completed_at = COALESCE($processingCompletedAt, processing_completed_at),
+        files_processed = COALESCE($filesProcessed, files_processed),
+        files_total = COALESCE($filesTotal, files_total),
+        estimated_cost_usd = COALESCE($estimatedCostUsd, estimated_cost_usd),
+        actual_cost_usd = COALESCE($actualCostUsd, actual_cost_usd),
+        updated_at = $updatedAt
+      WHERE user_id = $userId
+    `);
+
+    stmt.run({
+      $userId: userId,
+      $driveConnectedAt: updates.driveConnectedAt ?? null,
+      $metadataScanStartedAt: updates.metadataScanStartedAt ?? null,
+      $metadataScanCompletedAt: updates.metadataScanCompletedAt ?? null,
+      $totalFileCount: updates.totalFileCount ?? null,
+      $totalSizeBytes: updates.totalSizeBytes ?? null,
+      $folderCount: updates.folderCount ?? null,
+      $supportedFileCount: updates.supportedFileCount ?? null,
+      $supportedSizeBytes: updates.supportedSizeBytes ?? null,
+      $unsupportedFileCount: updates.unsupportedFileCount ?? null,
+      $sharedDocCount: updates.sharedDocCount ?? null,
+      $uniqueCollaboratorCount: updates.uniqueCollaboratorCount ?? null,
+      $reviewCompletedAt: updates.reviewCompletedAt ?? null,
+      $processingConfirmedAt: updates.processingConfirmedAt ?? null,
+      $processingOptions: updates.processingOptions ? JSON.stringify(updates.processingOptions) : null,
+      $processingStartedAt: updates.processingStartedAt ?? null,
+      $processingCompletedAt: updates.processingCompletedAt ?? null,
+      $filesProcessed: updates.filesProcessed ?? null,
+      $filesTotal: updates.filesTotal ?? null,
+      $estimatedCostUsd: updates.estimatedCostUsd ?? null,
+      $actualCostUsd: updates.actualCostUsd ?? null,
+      $updatedAt: now,
+    });
+  }
+
+  incrementFilesProcessed(userId: string) {
+    const now = new Date().toISOString();
+    const SMALL_BATCH_THRESHOLD = 10;
+    const COMPLETION_PROXIMITY_THRESHOLD = 5;
+    const COMPLETION_PERCENT_THRESHOLD = 0.9;
+    const AUTO_COMPLETE_PERCENT_THRESHOLD = 0.99;
+
+    const stmt = this.db.prepare(`
+      UPDATE onboarding SET
+        files_processed = COALESCE(files_processed, 0) + 1,
+        processing_completed_at = CASE
+          WHEN processing_completed_at IS NULL 
+            AND files_total IS NOT NULL
+            AND (
+              files_total <= ${SMALL_BATCH_THRESHOLD}
+              OR COALESCE(files_processed, 0) + 1 >= files_total - ${COMPLETION_PROXIMITY_THRESHOLD}
+              OR (COALESCE(files_processed, 0) + 1.0) / NULLIF(files_total, 0) >= ${COMPLETION_PERCENT_THRESHOLD}
+            )
+            AND (
+              COALESCE(files_processed, 0) + 1 >= files_total
+              OR (COALESCE(files_processed, 0) + 1.0) / NULLIF(files_total, 0) >= ${AUTO_COMPLETE_PERCENT_THRESHOLD}
+            )
+          THEN $now
+          ELSE processing_completed_at
+        END,
+        updated_at = $updatedAt
+      WHERE user_id = $userId
+    `);
+    stmt.run({ $userId: userId, $updatedAt: now, $now: now });
+  }
+
+  deleteOnboardingByUserId(userId: string) {
+    const stmt = this.db.prepare('DELETE FROM onboarding WHERE user_id = ?');
+    stmt.run(userId);
+  }
+
+  // Document metadata operations (for incremental scan progress)
+  upsertDocumentMetadata(file: {
+    userId: string;
+    googleFileId: string;
+    name: string;
+    mimeType: string;
+    classification?: 'supported' | 'future' | 'ignored';
+    sizeBytes?: number;
+    modifiedTime?: string;
+    shared?: boolean;
+    url?: string;
+  }) {
+    const existing = this.findDocumentByGoogleFileId(file.googleFileId);
+    const now = new Date().toISOString();
+
+    if (existing) {
+      this.updateDocumentMetadata(file, now);
+      return;
+    }
+
+    this.createDocumentMetadata(file, now);
+  }
+
+  private updateDocumentMetadata(
+    file: {
+      googleFileId: string;
+      name: string;
+      mimeType: string;
+      classification?: 'supported' | 'future' | 'ignored';
+      sizeBytes?: number;
+      modifiedTime?: string;
+      url?: string;
+    },
+    timestamp: string,
+  ) {
+    const stmt = this.db.prepare(`
+      UPDATE documents SET
+        title = $title,
+        url = COALESCE($url, url),
+        mime_type = COALESCE($mimeType, mime_type),
+        mime_type_classification = COALESCE($classification, mime_type_classification),
+        size_bytes = COALESCE($sizeBytes, size_bytes),
+        google_modified_time = $modifiedTime,
+        metadata_last_extracted = $timestamp,
+        updated_at = $updatedAt
+      WHERE google_file_id = $googleFileId
+    `);
+    stmt.run({
+      $title: file.name,
+      $url: file.url || null,
+      $mimeType: file.mimeType || null,
+      $classification: file.classification || null,
+      $sizeBytes: file.sizeBytes ?? null,
+      $modifiedTime: file.modifiedTime || null,
+      $timestamp: timestamp,
+      $updatedAt: timestamp,
+      $googleFileId: file.googleFileId,
+    });
+  }
+
+  private createDocumentMetadata(
+    file: {
+      userId: string;
+      googleFileId: string;
+      name: string;
+      mimeType: string;
+      classification?: 'supported' | 'future' | 'ignored';
+      sizeBytes?: number;
+      modifiedTime?: string;
+      url?: string;
+    },
+    timestamp: string,
+  ) {
+    const id = `doc_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const stmt = this.db.prepare(`
+      INSERT INTO documents (
+        id, title, content, url, source, user_id, google_file_id, google_modified_time,
+        mime_type, mime_type_classification, size_bytes, metadata_last_extracted, created_at, updated_at
+      )
+      VALUES ($id, $title, $content, $url, $source, $userId, $googleFileId, $modifiedTime, $mimeType, $classification, $sizeBytes, $timestamp, $createdAt, $updatedAt)
+    `);
+
+    stmt.run({
+      $id: id,
+      $title: file.name,
+      $content: '',
+      $url: file.url || null,
+      $source: 'google-drive',
+      $userId: file.userId,
+      $googleFileId: file.googleFileId,
+      $modifiedTime: file.modifiedTime || null,
+      $mimeType: file.mimeType || null,
+      $classification: file.classification || null,
+      $sizeBytes: file.sizeBytes ?? null,
+      $timestamp: timestamp,
+      $createdAt: timestamp,
+      $updatedAt: timestamp,
+    });
+  }
+
+  countDocumentsWithMetadata(userId: string): number {
+    const stmt = this.db.prepare(
+      'SELECT COUNT(*) as count FROM documents WHERE user_id = ? AND metadata_last_extracted IS NOT NULL',
+    );
+    const result = stmt.get(userId) as { count: number };
+    return result.count;
+  }
+
+  /**
+   * Compute file type breakdown from documents table for a user
+   * Aggregates counts in SQL for efficiency, then merges by display name in JavaScript
+   * This ensures that different image formats (image/jpeg, image/png, etc.) are merged into a single "Image" entry
+   */
+  computeFileTypeBreakdown(userId: string): Record<string, { count: number; sizeBytes: number; displayName: string; classification: 'supported' | 'future' | 'ignored' }> {
+    const mimeTypeCounts = this.aggregateMimeTypeCounts(userId);
+    const breakdownMap = this.buildBreakdownMap(mimeTypeCounts);
+    return this.mapToRecord(breakdownMap);
+  }
+
+  private aggregateMimeTypeCounts(userId: string) {
+    return this.db
+      .prepare(`
+        SELECT 
+          mime_type,
+          mime_type_classification,
+          COUNT(*) as count,
+          COALESCE(SUM(size_bytes), 0) as total_size_bytes
+        FROM documents
+        WHERE user_id = ? AND metadata_last_extracted IS NOT NULL AND mime_type IS NOT NULL
+        GROUP BY mime_type, mime_type_classification
+      `)
+      .all(userId) as Array<{
+        mime_type: string;
+        mime_type_classification: string | null;
+        count: number;
+        total_size_bytes: number;
+      }>;
+  }
+
+  private buildBreakdownMap(
+    mimeTypeCounts: Array<{
+      mime_type: string;
+      mime_type_classification: string | null;
+      count: number;
+      total_size_bytes: number;
+    }>,
+  ): Map<string, { count: number; sizeBytes: number; displayName: string; classification: 'supported' | 'future' | 'ignored' }> {
+    const breakdownMap = new Map<string, { count: number; sizeBytes: number; displayName: string; classification: 'supported' | 'future' | 'ignored' }>();
+
+    for (const row of mimeTypeCounts) {
+      const classification = (row.mime_type_classification || classifyMimeType(row.mime_type)) as 'supported' | 'future' | 'ignored';
+      const displayName = getMimeTypeDisplayName(row.mime_type);
+      const key = `${displayName}|${classification}`;
+
+      if (!breakdownMap.has(key)) {
+        breakdownMap.set(key, {
+          count: 0,
+          sizeBytes: 0,
+          displayName,
+          classification,
+        });
+      }
+
+      const entry = breakdownMap.get(key)!;
+      entry.count += row.count;
+      entry.sizeBytes += row.total_size_bytes;
+    }
+
+    return breakdownMap;
+  }
+
+  private mapToRecord(
+    breakdownMap: Map<string, { count: number; sizeBytes: number; displayName: string; classification: 'supported' | 'future' | 'ignored' }>,
+  ): Record<string, { count: number; sizeBytes: number; displayName: string; classification: 'supported' | 'future' | 'ignored' }> {
+    const breakdown: Record<string, { count: number; sizeBytes: number; displayName: string; classification: 'supported' | 'future' | 'ignored' }> = {};
+    for (const [key, value] of breakdownMap.entries()) {
+      breakdown[key] = value;
+    }
+    return breakdown;
+  }
+
+  deleteDocumentsMetadataByUserId(userId: string) {
+    // Delete only documents that have metadata but no content analyzed
+    const stmt = this.db.prepare(
+      'DELETE FROM documents WHERE user_id = ? AND metadata_last_extracted IS NOT NULL AND (content_last_analyzed IS NULL OR content_last_analyzed = "")',
+    );
+    stmt.run(userId);
+  }
+
+  incrementMetadataFilesScanned(userId: string) {
+    const now = new Date().toISOString();
+    const stmt = this.db.prepare(`
+      UPDATE onboarding SET
+        metadata_files_scanned = COALESCE(metadata_files_scanned, 0) + 1,
+        updated_at = $updatedAt
+      WHERE user_id = $userId
+    `);
+    stmt.run({ $userId: userId, $updatedAt: now });
+  }
 }
 
 // Row types for SQLite results
@@ -757,6 +1202,11 @@ export interface DocumentRow {
   google_file_id: string | null;
   google_modified_time: string | null;
   summary: string | null;
+  metadata_last_extracted: string | null;
+  content_last_analyzed: string | null;
+  mime_type: string | null;
+  mime_type_classification: string | null;
+  size_bytes: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -793,5 +1243,45 @@ export interface CollaboratorRow {
   role: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface OnboardingRow {
+  id: string;
+  user_id: string;
+  drive_connected_at: string | null;
+  metadata_scan_started_at: string | null;
+  metadata_scan_completed_at: string | null;
+  metadata_files_scanned: number | null;
+  total_file_count: number | null;
+  total_size_bytes: number | null;
+  folder_count: number | null;
+  supported_file_count: number | null;
+  supported_size_bytes: number | null;
+  unsupported_file_count: number | null;
+  shared_doc_count: number | null;
+  unique_collaborator_count: number | null;
+  review_completed_at: string | null;
+  processing_confirmed_at: string | null;
+  processing_options: string | null;
+  processing_started_at: string | null;
+  processing_completed_at: string | null;
+  files_processed: number | null;
+  files_total: number | null;
+  estimated_cost_usd: number | null;
+  actual_cost_usd: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DriveMetadataFileRow {
+  id: string;
+  user_id: string;
+  google_file_id: string;
+  name: string;
+  mime_type: string;
+  size_bytes: number | null;
+  modified_time: string | null;
+  shared: number;
+  created_at: string;
 }
 

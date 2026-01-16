@@ -154,10 +154,15 @@ async function backfillCollaborators(userId?: string) {
 
           console.log(`  Permissions: ${permissions.length}, Revisions: ${revisions.length}`);
 
-          // Extract collaborators
+          // Get user's email to exclude author from collaborator list
+          const user = databaseService.findUserById(currentUserId);
+          const authorEmail = user?.email;
+
+          // Extract collaborators (exclude author)
           const collaborators = googleDriveService.extractCollaborators(
             permissions,
             revisions,
+            authorEmail,
           );
 
           if (collaborators.length === 0) {

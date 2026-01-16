@@ -24,6 +24,27 @@ export class GoogleDriveSyncListener {
   @OnEvent('google.drive.sync.requested')
   async handleSyncRequested(event: GoogleDriveSyncRequestedEvent) {
     this.logger.log(`Sync requested for user ${event.userId}`);
+
+    // CRITICAL GUARDRAIL: Check if user has confirmed processing
+    // This prevents content processing (embeddings, LLM) before explicit consent
+    const onboarding = this.databaseService.findOnboardingByUserId(event.userId);
+    if (onboarding?.processing_confirmed_at) {
+      // User has confirmed, proceed
+    } else {
+      // Check if this is an existing user with documents (grandfathered in)
+      const existingDocs = this.databaseService.findDocumentsByUserId(event.userId);
+      if (existingDocs.length === 0) {
+        this.logger.warn(
+          `Processing blocked for user ${event.userId}: onboarding not confirmed. ` +
+          `User must complete onboarding flow before content processing.`,
+        );
+        return;
+      }
+      this.logger.log(
+        `User ${event.userId} is grandfathered in with ${existingDocs.length} existing documents`,
+      );
+    }
+
     try {
       let pageToken: string | undefined = undefined;
       let pageCount = 0;
@@ -84,10 +105,23 @@ export class GoogleDriveSyncListener {
         try {
           const existingDoc = this.databaseService.findDocumentByGoogleFileId(file.id);
 
-          // Skip if already synced and not modified
-          if (existingDoc && existingDoc.google_modified_time === file.modifiedTime) {
+          // Skip if already synced, not modified, AND content has been analyzed
+          // But still count it toward onboarding completion
+          if (
+            existingDoc &&
+            existingDoc.google_modified_time === file.modifiedTime &&
+            existingDoc.content_last_analyzed
+          ) {
             this.logger.debug(`File ${file.name} is already up to date, skipping.`);
+            this.databaseService.incrementFilesProcessed(userId);
             return;
+          }
+
+          // Process if file hasn't been analyzed yet (content_last_analyzed is null)
+          if (existingDoc && !existingDoc.content_last_analyzed) {
+            this.logger.log(
+              `File ${file.name} exists but content not analyzed yet, processing for analysis.`,
+            );
           }
 
           this.logger.log(`Downloading and extracting text for ${file.name}...`);
@@ -99,9 +133,13 @@ export class GoogleDriveSyncListener {
               file.mimeType,
             );
 
-          // Extract collaborators from permissions and revisions
+          // Get user's email to exclude author from collaborator list
+          const user = this.databaseService.findUserById(userId);
+          const authorEmail = user?.email;
+
+          // Extract collaborators from permissions and revisions (exclude author)
           const collaborators =
-            this.googleDriveService.extractCollaborators(permissions, revisions);
+            this.googleDriveService.extractCollaborators(permissions, revisions, authorEmail);
 
           if (existingDoc) {
             this.logger.log(`Updating existing document for ${file.name}`);
@@ -136,14 +174,23 @@ export class GoogleDriveSyncListener {
               collaborators,
             );
           }
+
+          // Track progress for onboarding
+          this.databaseService.incrementFilesProcessed(userId);
         } catch (error) {
           this.logger.error(`Failed to process file ${file.name} for user ${userId}`, error);
+          // Still increment counter for onboarding completion tracking
+          // This prevents failed files from blocking completion
+          // Failed files are tracked separately by queue service stats
+          this.databaseService.incrementFilesProcessed(userId);
           throw error; // Re-throw so queue service can track failures
         }
       },
       `process-file-${file.id}`,
     ).catch((error) => {
       // Error already logged by queue service
+      // Note: incrementFilesProcessed is called in the try/catch above,
+      // so failed files still count toward completion
       this.logger.error(
         `File processing job failed for ${file.name} (${file.id})`,
         error,

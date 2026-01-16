@@ -14,6 +14,7 @@ import { BoardsModule } from './boards/boards.module';
 import { AppModule as AppCommunicationModule } from './app/app.module';
 import { DuplicatesModule } from './duplicates/duplicates.module';
 import { AvatarsModule } from './avatars/avatars.module';
+import { OnboardingModule } from './onboarding/onboarding.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { AvatarsModule } from './avatars/avatars.module';
     AppCommunicationModule,
     DuplicatesModule,
     AvatarsModule,
+    OnboardingModule,
   ],
 })
 export class AppModule {}

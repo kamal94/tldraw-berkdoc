@@ -29,6 +29,7 @@ Commands:
   clear-user <userId>   Delete all documents and chunks for a user
   clear-doc <docId>     Delete a specific document and its chunks
   clear-board <userId>  Delete a board for a specific user
+  clear-onboarding <userId>  Clear onboarding data for a user
   clear-duplicates <userId>  Clear all duplicates for a user
   clear-all-duplicates  Clear all duplicates from database
   clear-all             Clear all documents and all chunks from Weaviate
@@ -74,6 +75,10 @@ Commands:
       case 'clear-board':
         if (!args[1]) throw new Error('userId is required');
         await clearBoard(db, args[1]);
+        break;
+      case 'clear-onboarding':
+        if (!args[1]) throw new Error('userId is required');
+        clearOnboarding(db, args[1]);
         break;
       case 'clear-all':
         await clearAll(db, client);
@@ -239,6 +244,40 @@ async function clearBoard(db: Database, userId: string) {
   const stmt = db.prepare('DELETE FROM boards WHERE user_id = ?');
   stmt.run(userId);
   console.log('Cleared board from database.');
+}
+
+function clearOnboarding(db: Database, userId: string) {
+  // Check if user exists
+  const user = db.query('SELECT id FROM users WHERE id = ?').get(userId) as any;
+  if (!user) {
+    console.error(`User ${userId} not found`);
+    return;
+  }
+
+  // Check if onboarding record exists
+  const onboarding = db.query('SELECT id FROM onboarding WHERE user_id = ?').get(userId) as any;
+  if (!onboarding) {
+    console.error(`Onboarding record for user ${userId} not found`);
+    return;
+  }
+
+  console.log(`Clearing onboarding data for user ${userId}...`);
+
+  // Count drive metadata files before deletion
+  const metadataCountResult = db.query('SELECT COUNT(*) as count FROM drive_metadata_files WHERE user_id = ?').get(userId) as any;
+  const metadataCount = metadataCountResult.count;
+
+  // Delete drive metadata files from DB
+  if (metadataCount > 0) {
+    const metadataStmt = db.prepare('DELETE FROM drive_metadata_files WHERE user_id = ?');
+    metadataStmt.run(userId);
+    console.log(`Cleared ${metadataCount} drive metadata files from database.`);
+  }
+
+  // Delete onboarding record from DB
+  const stmt = db.prepare('DELETE FROM onboarding WHERE user_id = ?');
+  stmt.run(userId);
+  console.log('Cleared onboarding data from database.');
 }
 
 async function clearAllBoards(db: Database) {

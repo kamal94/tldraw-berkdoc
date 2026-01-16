@@ -25,6 +25,27 @@ export interface FileProcessingResult {
   }>;
 }
 
+/** Metadata for a single file (no content) */
+export interface DriveFileMetadata {
+  id?: string;
+  name?: string;
+  mimeType?: string;
+  size?: string;
+  modifiedTime?: string;
+  shared?: boolean;
+  webViewLink?: string;
+  owners?: Array<{ emailAddress?: string }>;
+  permissions?: Array<{ emailAddress?: string; type?: string }>;
+}
+
+/** Result of a metadata-only scan */
+export interface DriveMetadataResult {
+  files: DriveFileMetadata[];
+  totalFileCount: number;
+  totalSizeBytes: number;
+  folderCount: number;
+}
+
 @Injectable()
 export class GoogleDriveService {
   private readonly logger = new Logger(GoogleDriveService.name);
@@ -81,6 +102,90 @@ export class GoogleDriveService {
     return {
       files: response.data.files || [],
       nextPageToken: response.data.nextPageToken || undefined,
+    };
+  }
+
+  /**
+   * List ALL files metadata without downloading content.
+   * This is used for the onboarding metadata scan to give users
+   * visibility into their Drive before processing.
+   * 
+   * IMPORTANT: This method does NOT read file content - only metadata.
+   * 
+   * @param onBatch - Optional callback called for each batch of files for incremental processing
+   */
+  async listAllFilesMetadata(
+    userId: string,
+    onBatch?: (files: DriveFileMetadata[], folderCount: number) => Promise<void>,
+  ): Promise<DriveMetadataResult> {
+    const drive = await this.getDriveClient(userId);
+    
+    const files: DriveFileMetadata[] = [];
+    let folderCount = 0;
+    let totalSizeBytes = 0;
+    let pageToken: string | undefined = undefined;
+    let pageCount = 0;
+
+    // Query ALL files (not trashed) - we want a complete picture
+    const q = "trashed = false";
+    
+    // Request only metadata fields - NO content (including webViewLink for document URLs)
+    const fields = 'nextPageToken, files(id, name, mimeType, size, modifiedTime, shared, webViewLink, owners(emailAddress), permissions(emailAddress, type))';
+
+    do {
+      pageCount++;
+      this.logger.log(`Fetching metadata page ${pageCount} for user ${userId}`);
+
+      const response = await drive.files.list({
+        q,
+        fields,
+        pageSize: 1000, // Max allowed by API
+        pageToken,
+      }) as { 
+        data: { 
+          files?: DriveFileMetadata[];
+          nextPageToken?: string;
+        };
+      };
+
+      const pageFiles = response.data.files || [];
+      const batchFiles: DriveFileMetadata[] = [];
+      let batchFolderCount = 0;
+      
+      for (const file of pageFiles) {
+        // Track folders separately
+        if (file.mimeType === 'application/vnd.google-apps.folder') {
+          folderCount++;
+          batchFolderCount++;
+          continue;
+        }
+
+        // Add to files list (exclude folders)
+        files.push(file);
+        batchFiles.push(file);
+        
+        // Accumulate size (Google Docs don't have size, so default to 0)
+        const fileSize = parseInt(file.size || '0', 10);
+        totalSizeBytes += fileSize;
+      }
+
+      // Call incremental callback if provided
+      if (onBatch && batchFiles.length > 0) {
+        await onBatch(batchFiles, batchFolderCount);
+      }
+
+      pageToken = response.data.nextPageToken;
+    } while (pageToken);
+
+    this.logger.log(
+      `Metadata scan complete for user ${userId}: ${files.length} files, ${folderCount} folders, ${pageCount} pages`,
+    );
+
+    return {
+      files,
+      totalFileCount: files.length,
+      totalSizeBytes,
+      folderCount,
     };
   }
 
@@ -157,20 +262,26 @@ export class GoogleDriveService {
   extractCollaborators(
     permissions: FileProcessingResult['permissions'],
     revisions: FileProcessingResult['revisions'],
+    authorEmail?: string,
   ): CollaboratorData[] {
     const collaboratorMap = new Map<string, CollaboratorData>();
+    const normalizedAuthorEmail = authorEmail?.toLowerCase();
 
     // Extract from permissions
     for (const perm of permissions) {
       if (perm.type === 'user') {
         if (perm.emailAddress) {
-          collaboratorMap.set(perm.emailAddress.toLowerCase(), {
-            email: perm.emailAddress,
-            name: perm.displayName || perm.emailAddress.split('@')[0],
-            avatarUrl: perm.photoLink,
-            source: 'permissions',
-            role: perm.role,
-          });
+          const email = perm.emailAddress.toLowerCase();
+          // Exclude the author from collaborator list
+          if (email !== normalizedAuthorEmail) {
+            collaboratorMap.set(email, {
+              email: perm.emailAddress,
+              name: perm.displayName || perm.emailAddress.split('@')[0],
+              avatarUrl: perm.photoLink,
+              source: 'permissions',
+              role: perm.role,
+            });
+          }
         } else if (perm.displayName) {
           // Handle case where we only have a name (no email) from permissions
           const nameKey = perm.displayName.toLowerCase();
@@ -195,17 +306,20 @@ export class GoogleDriveService {
       const user = rev.lastModifyingUser;
       if (user?.emailAddress) {
         const email = user.emailAddress.toLowerCase();
-        const existing = collaboratorMap.get(email);
-        collaboratorMap.set(email, {
-          email: user.emailAddress,
-          name:
-            user.displayName ||
-            existing?.name ||
-            user.emailAddress.split('@')[0],
-          avatarUrl: user.photoLink || existing?.avatarUrl,
-          source: existing ? 'both' : 'revisions',
-          role: existing?.role,
-        });
+        // Exclude the author from collaborator list
+        if (email !== normalizedAuthorEmail) {
+          const existing = collaboratorMap.get(email);
+          collaboratorMap.set(email, {
+            email: user.emailAddress,
+            name:
+              user.displayName ||
+              existing?.name ||
+              user.emailAddress.split('@')[0],
+            avatarUrl: user.photoLink || existing?.avatarUrl,
+            source: existing ? 'both' : 'revisions',
+            role: existing?.role,
+          });
+        }
       } else if (user?.displayName) {
         // Handle case where we only have a name (no email) from revisions
         // Only add if we don't already have this person from permissions

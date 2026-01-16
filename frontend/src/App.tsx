@@ -6,12 +6,14 @@ import { DocumentShapeUtil } from "./shapes/DocumentShape";
 import { AnimationProvider } from "./contexts/AnimationProvider";
 import { AuthProvider } from "./contexts/AuthProvider";
 import { WebSocketProvider } from "./contexts/WebSocketProvider";
+import { OnboardingProvider } from "./contexts/OnboardingProvider";
 import { useAuth } from "./hooks/useAuth";
 import { ConfigPanel } from "./components/ConfigPanel";
 import { SignInButton } from "./components/SignInButton";
 import { SmartExplorer } from "./components/SmartExplorer";
 import { UserMenu } from "./components/UserMenu";
 import { DuplicatesPage } from "./components/DuplicatesPage";
+import { OnboardingWizard } from "./components/onboarding/OnboardingWizard";
 import { useBoardSync } from "./hooks/useBoardSync";
 
 const customShapeUtils = [DocumentShapeUtil];
@@ -130,6 +132,8 @@ function AppContents() {
       <SignInButton />
       {isAuthenticated && <SmartExplorer />}
       {isAuthenticated && <UserMenu onViewDuplicates={() => setShowDuplicates(true)} />}
+      {/* Onboarding wizard modal for new users */}
+      {isAuthenticated && <OnboardingWizard />}
     </div>
   );
 }
@@ -138,9 +142,11 @@ function App() {
   return (
     <AuthProvider>
       <WebSocketProvider>
-        <AnimationProvider>
-          <AppContents />
-        </AnimationProvider>
+        <OnboardingProvider>
+          <AnimationProvider>
+            <AppContents />
+          </AnimationProvider>
+        </OnboardingProvider>
       </WebSocketProvider>
     </AuthProvider>
   );

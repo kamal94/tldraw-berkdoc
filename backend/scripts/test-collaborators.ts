@@ -144,10 +144,15 @@ async function testCollaborators(userId: string, limit: number = 5) {
         console.log(`  Permissions found: ${permissions.length}`);
         console.log(`  Revisions found: ${revisions.length}`);
 
-        // Extract collaborators
+        // Get user's email to exclude author from collaborator list
+        const user = databaseService.findUserById(userId);
+        const authorEmail = user?.email;
+
+        // Extract collaborators (exclude author)
         const collaborators = googleDriveService.extractCollaborators(
           permissions,
           revisions,
+          authorEmail,
         );
 
         console.log(`  Collaborators extracted: ${collaborators.length}`);
