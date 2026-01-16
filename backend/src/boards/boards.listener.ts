@@ -22,35 +22,42 @@ export class BoardsListener {
     this.logger.log(`Handling document.created event for document ${event.id}`);
 
     try {
-      // Fetch full document from database to get all fields
-      const docRow = this.databaseService.findDocumentById(event.id);
-      if (!docRow) {
-        this.logger.warn(`Document ${event.id} not found in database`);
-        return;
-      }
+      const boards = this.boardsService.listBoards(event.userId);
+      const targetBoard = boards[0];
+      if (!targetBoard) return;
 
-      const document: Document = {
-        id: docRow.id,
-        title: docRow.title,
-        content: docRow.content,
-        url: docRow.url || undefined,
-        source: docRow.source,
-        userId: docRow.user_id,
-        tags: docRow.tags ? JSON.parse(docRow.tags) : [],
-        summary: docRow.summary || undefined,
-        createdAt: new Date(docRow.created_at),
-        updatedAt: new Date(docRow.updated_at),
-      };
+      const document = this.getDocumentFromDatabase(event.id);
+      if (!document) return;
 
-      // Add document shape to user's board
-      await this.boardsService.addDocumentShape(event.userId, document);
+      await this.boardsService.addDocumentShape(targetBoard.id, document);
 
       this.logger.log(
-        `Added document shape for document ${event.id} to user ${event.userId}'s board`
+        `Added document shape for document ${event.id} to board ${targetBoard.id}`
       );
     } catch (error) {
       this.logger.error(`Failed to add document shape for ${event.id}:`, error);
     }
+  }
+
+  private getDocumentFromDatabase(documentId: string): Document | null {
+    const docRow = this.databaseService.findDocumentById(documentId);
+    if (!docRow) {
+      this.logger.warn(`Document ${documentId} not found in database`);
+      return null;
+    }
+
+    return {
+      id: docRow.id,
+      title: docRow.title,
+      content: docRow.content,
+      url: docRow.url || undefined,
+      source: docRow.source,
+      userId: docRow.user_id,
+      tags: docRow.tags ? JSON.parse(docRow.tags) : [],
+      summary: docRow.summary || undefined,
+      createdAt: new Date(docRow.created_at),
+      updatedAt: new Date(docRow.updated_at),
+    };
   }
 
   @OnEvent('document.deleted')
@@ -58,11 +65,15 @@ export class BoardsListener {
     this.logger.log(`Handling document.deleted event for document ${event.id}`);
 
     try {
-      // Remove document shape from user's board
-      await this.boardsService.removeDocumentShape(event.userId, event.id);
+      const boards = this.boardsService.listBoards(event.userId);
+      if (boards.length === 0) return;
+
+      for (const board of boards) {
+        await this.boardsService.removeDocumentShape(board.id, event.id);
+      }
 
       this.logger.log(
-        `Removed document shape for document ${event.id} from user ${event.userId}'s board`
+        `Removed document shape for document ${event.id} from all boards for user ${event.userId}`
       );
     } catch (error) {
       this.logger.error(`Failed to remove document shape for ${event.id}:`, error);
