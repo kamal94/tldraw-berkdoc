@@ -7,6 +7,7 @@ import { BoardsService } from './boards.service';
 import { BoardsRoomManager } from './boards.room-manager';
 import { BoardsGateway } from './boards.gateway';
 import { BoardsListener } from './boards.listener';
+import { BoardsController } from './boards.controller';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { BoardsListener } from './boards.listener';
       }),
     }),
   ],
+  controllers: [BoardsController],
   providers: [BoardsRoomManager, BoardsService, BoardsGateway, BoardsListener],
   exports: [BoardsService, BoardsRoomManager],
 })

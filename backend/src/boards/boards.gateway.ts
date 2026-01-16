@@ -6,6 +6,7 @@ import type { IncomingMessage } from 'http';
 import { BoardsRoomManager } from './boards.room-manager';
 import { AuthService } from '../auth/auth.service';
 import type { JwtPayload } from '../auth/entities/user.entity';
+import { DatabaseService } from '../database/database.service';
 
 @Injectable()
 export class BoardsGateway implements OnModuleInit, OnModuleDestroy {
@@ -16,7 +17,8 @@ export class BoardsGateway implements OnModuleInit, OnModuleDestroy {
     private readonly roomManager: BoardsRoomManager,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-    private readonly authService: AuthService
+    private readonly authService: AuthService,
+    private readonly databaseService: DatabaseService
   ) {}
 
   onModuleInit() {
@@ -51,45 +53,82 @@ export class BoardsGateway implements OnModuleInit, OnModuleDestroy {
   }
 
   private async handleConnection(socket: WebSocket, request: IncomingMessage) {
-    // Extract token from query params
-    const url = new URL(request.url || '', `http://${request.headers.host}`);
-    const token = url.searchParams.get('token');
-
+    const { token, boardId } = this.extractConnectionParams(request);
+    
     if (!token) {
       this.logger.warn('WebSocket connection rejected: No token provided');
       socket.close(4001, 'Authentication required');
       return;
     }
 
-    // Verify JWT token
+    if (!boardId) {
+      this.logger.warn('WebSocket connection rejected: No boardId provided');
+      socket.close(4001, 'Board ID required');
+      return;
+    }
+
+    const userId = await this.authenticateConnection(token);
+    if (!userId) {
+      socket.close(4001, 'Authentication failed');
+      return;
+    }
+
+    const isValidBoard = await this.validateBoardAccess(boardId, userId);
+    if (!isValidBoard) {
+      socket.close(4003, 'Board not found');
+      return;
+    }
+
+    const sessionId = this.generateSessionId(userId, boardId);
+    this.logger.log(
+      `WebSocket connection established for user ${userId}, board ${boardId}, session ${sessionId}`
+    );
+
+    await this.connectToRoom(socket, boardId, sessionId, userId);
+  }
+
+  private extractConnectionParams(request: IncomingMessage): { token: string | null; boardId: string | null } {
+    const url = new URL(request.url || '', `http://${request.headers.host}`);
+    return {
+      token: url.searchParams.get('token'),
+      boardId: url.searchParams.get('boardId'),
+    };
+  }
+
+  private async authenticateConnection(token: string): Promise<string | null> {
     let payload: JwtPayload;
     try {
       const secret = this.configService.get<string>('JWT_SECRET') || 'default-secret';
       payload = this.jwtService.verify<JwtPayload>(token, { secret });
     } catch (error) {
       this.logger.error('WebSocket connection rejected: Invalid token', error);
-      socket.close(4001, 'Invalid token');
-      return;
+      return null;
     }
 
-    // Validate user exists
     const user = await this.authService.validateUserById(payload.sub);
     if (!user) {
       this.logger.warn('WebSocket connection rejected: User not found');
-      socket.close(4001, 'User not found');
-      return;
+      return null;
     }
 
-    const userId = user.id;
-    const sessionId = `${userId}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    return user.id;
+  }
 
-    this.logger.log(`WebSocket connection established for user ${userId}, session ${sessionId}`);
+  private async validateBoardAccess(boardId: string, userId: string): Promise<boolean> {
+    const boardRow = this.databaseService.findBoardById(boardId);
+    if (!boardRow || boardRow.user_id !== userId) {
+      this.logger.warn('WebSocket connection rejected: Board not found');
+      return false;
+    }
+    return true;
+  }
 
-    // Get or create room for this user
-    const room = await this.roomManager.getOrCreateRoom(userId);
+  private generateSessionId(userId: string, boardId: string): string {
+    return `${userId}-${boardId}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
 
-    // Create a minimal WebSocket adapter for tldraw
-    const wsAdapter = {
+  private createWebSocketAdapter(socket: WebSocket) {
+    return {
       send: (data: string) => {
         if (socket.readyState === WebSocket.OPEN) {
           socket.send(data);
@@ -114,20 +153,29 @@ export class BoardsGateway implements OnModuleInit, OnModuleDestroy {
         socket.off(type, listener);
       },
     };
+  }
 
-    // Connect socket to room
+  private async connectToRoom(
+    socket: WebSocket,
+    boardId: string,
+    sessionId: string,
+    userId: string
+  ): Promise<void> {
+    const room = await this.roomManager.getOrCreateRoom(boardId);
+    const wsAdapter = this.createWebSocketAdapter(socket);
+
     room.handleSocketConnect({
       sessionId,
       socket: wsAdapter,
       isReadonly: false,
     });
 
-    // Handle socket close
     socket.on('close', () => {
-      this.logger.log(`WebSocket closed for user ${userId}, session ${sessionId}`);
+      this.logger.log(
+        `WebSocket closed for user ${userId}, board ${boardId}, session ${sessionId}`
+      );
     });
 
-    // Handle socket error
     socket.on('error', (error) => {
       this.logger.error(`WebSocket error for user ${userId}:`, error);
     });

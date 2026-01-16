@@ -10,21 +10,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Check for existing auth on mount
   useEffect(() => {
     const checkAuth = async () => {
+      // Handle OAuth callback first
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get('token');
+      if (token) {
+        localStorage.setItem('auth_token', token);
+        // Clean URL immediately to prevent re-processing on re-render
+        window.history.replaceState({}, '', window.location.pathname);
+        // Small delay to ensure token is saved before fetching user
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
       if (authApi.isAuthenticated()) {
         const currentUser = await authApi.getCurrentUser();
-        setUser(currentUser);
+        // Only set user if we got a valid user, otherwise keep stored user if available
+        if (currentUser) {
+          setUser(currentUser);
+        } else {
+          // Fallback to stored user if API call failed but token exists
+          const storedUser = authApi.getStoredUser();
+          if (storedUser) {
+            setUser(storedUser);
+          }
+        }
       }
       setIsLoading(false);
     };
-
-    // Handle OAuth callback
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get('token');
-    if (token) {
-      localStorage.setItem('auth_token', token);
-      // Clean URL
-      window.history.replaceState({}, '', window.location.pathname);
-    }
 
     checkAuth();
   }, []);

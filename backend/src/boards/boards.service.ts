@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { BoardsRoomManager } from './boards.room-manager';
 import { DatabaseService } from '../database/database.service';
 import type { Document } from '../documents/entities/document.entity';
@@ -8,6 +8,7 @@ import { TLBaseShape } from '@tldraw/tlschema';
 import { generateKeyBetween } from 'fractional-indexing';
 import type { RoomSnapshot } from '@tldraw/sync-core';
 import { validateShape } from './shape-validator.util';
+import { emailToColor } from './utils/color.utils';
 
 const CARD_WIDTH = 300;
 const CARD_HEIGHT = 140;
@@ -24,39 +25,55 @@ export class BoardsService {
     private readonly databaseService: DatabaseService
   ) {}
 
-  /**
-   * Get or create a board for a user.
-   * Returns the board entity.
-   */
-  getOrCreateBoard(userId: string): Board | null {
-    let boardRow = this.databaseService.findBoardByUserId(userId);
-
-    if (!boardRow) {
-      const boardId = crypto.randomUUID();
-      this.databaseService.createBoard({ id: boardId, userId });
-      boardRow = this.databaseService.findBoardByUserId(userId);
+  listBoards(userId: string): Board[] {
+    const rows = this.databaseService.findBoardsByUserId(userId);
+    if (rows.length === 0) {
+      return [this.createBoard(userId, 'My Board')];
     }
+    return rows.map((row) => this.rowToBoard(row));
+  }
 
+  createBoard(userId: string, name?: string): Board {
+    const boardId = crypto.randomUUID();
+    this.databaseService.createBoard({ id: boardId, userId, name });
+    const boardRow = this.databaseService.findBoardById(boardId);
     if (!boardRow) {
-      return null;
+      throw new NotFoundException('Board not found after creation');
     }
+    return this.rowToBoard(boardRow);
+  }
 
-    return {
-      id: boardRow.id,
-      userId: boardRow.user_id,
-      name: boardRow.name,
-      snapshot: boardRow.snapshot,
-      createdAt: new Date(boardRow.created_at),
-      updatedAt: new Date(boardRow.updated_at),
-    };
+  getBoardById(boardId: string, userId: string): Board {
+    const boardRow = this.databaseService.findBoardById(boardId);
+    if (!boardRow || boardRow.user_id !== userId) {
+      throw new NotFoundException('Board not found');
+    }
+    return this.rowToBoard(boardRow);
+  }
+
+  updateBoardName(userId: string, boardId: string, name?: string): Board {
+    const board = this.getBoardById(boardId, userId);
+    if (!name) return board;
+
+    this.databaseService.updateBoardName(boardId, name);
+    const updatedRow = this.databaseService.findBoardById(boardId);
+    if (!updatedRow) {
+      throw new NotFoundException('Board not found');
+    }
+    return this.rowToBoard(updatedRow);
+  }
+
+  deleteBoard(userId: string, boardId: string): void {
+    this.getBoardById(boardId, userId);
+    this.databaseService.deleteBoard(boardId);
   }
 
   /**
    * Add a document shape to a user's board.
    * This will be synced to all connected clients.
    */
-  async addDocumentShape(userId: string, document: Document): Promise<void> {
-    const room = await this.roomManager.getOrCreateRoom(userId);
+  async addDocumentShape(boardId: string, document: Document): Promise<void> {
+    const room = await this.roomManager.getOrCreateRoom(boardId);
     const shapeId = `shape:${document.id}`;
 
     // Check if shape already exists
@@ -88,12 +105,12 @@ export class BoardsService {
       throw new Error(`Shape validation failed for document ${document.id} (${document.title}): ${validationResult.error}`);
     }
 
-    this.logger.debug(`Adding document shape ${shapeId} to user ${userId}'s board`);
+    this.logger.debug(`Adding document shape ${shapeId} to board ${boardId}`);
     await room.updateStore((store) => {
       store.put(documentShape);
     });
 
-    this.logger.log(`Added document shape ${shapeId} to user ${userId}'s board`);
+    this.logger.log(`Added document shape ${shapeId} to board ${boardId}`);
   }
 
   /**
@@ -224,10 +241,10 @@ export class BoardsService {
   /**
    * Remove a document shape from a user's board.
    */
-  async removeDocumentShape(userId: string, documentId: string): Promise<void> {
-    const room = this.roomManager.getRoom(userId);
+  async removeDocumentShape(boardId: string, documentId: string): Promise<void> {
+    const room = this.roomManager.getRoom(boardId);
     if (!room) {
-      this.logger.warn(`No active room for user ${userId}`);
+      this.logger.warn(`No active room for board ${boardId}`);
       return;
     }
 
@@ -237,7 +254,7 @@ export class BoardsService {
       const shape = store.get(shapeId);
       if (shape) {
         store.delete(shapeId);
-        this.logger.log(`Removed document shape ${shapeId} from user ${userId}'s board`);
+        this.logger.log(`Removed document shape ${shapeId} from board ${boardId}`);
       }
     });
   }
@@ -245,15 +262,25 @@ export class BoardsService {
   /**
    * Get the room for WebSocket connections.
    */
-  async getRoomForConnection(userId: string) {
-    return this.roomManager.getOrCreateRoom(userId);
+  async getRoomForConnection(boardId: string) {
+    return this.roomManager.getOrCreateRoom(boardId);
   }
-}
 
-function emailToColor(email: string): string {
-  const hash = email.split('').reduce((hash, char) => {
-    return ((hash << 5) - hash) + char.charCodeAt(0);
-  }, 0).toString(36).substring(0, 6);
-  const color = `#${hash.toString().padStart(6, '0')}`;
-  return color;
+  private rowToBoard(row: {
+    id: string;
+    user_id: string;
+    name: string;
+    snapshot: string | null;
+    created_at: string;
+    updated_at: string;
+  }): Board {
+    return {
+      id: row.id,
+      userId: row.user_id,
+      name: row.name,
+      snapshot: row.snapshot,
+      createdAt: new Date(row.created_at),
+      updatedAt: new Date(row.updated_at),
+    };
+  }
 }

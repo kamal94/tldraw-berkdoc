@@ -77,6 +77,10 @@ export class SmartExplorerService {
     userId: string,
     results: Array<{ documentId: string }>,
   ): Promise<number> {
+    const boards = this.boardsService.listBoards(userId);
+    const targetBoard = boards[0];
+    if (!targetBoard) return 0;
+
     let addedCount = 0;
 
     for (const result of results) {
@@ -85,7 +89,7 @@ export class SmartExplorerService {
           userId,
           result.documentId,
         );
-        await this.boardsService.addDocumentShape(userId, document);
+        await this.boardsService.addDocumentShape(targetBoard.id, document);
         addedCount++;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);

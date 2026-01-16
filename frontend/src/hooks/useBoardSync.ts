@@ -18,22 +18,22 @@ function getAuthToken(): string | null {
  * Returns a store that can be passed to the Tldraw component.
  * Returns null when not authenticated (use localStorage persistence instead).
  *
- * @param userId - The authenticated user's ID (undefined if not authenticated)
+ * @param boardId - The active board ID (undefined if not selected)
  * @param userInfo - The user preferences/info to pass to sync (optional)
  */
 export function useBoardSync(
-  userId: string | undefined,
+  boardId: string | undefined,
   userInfo?: Pick<TLUserPreferences, 'id' | 'name' | 'color' | 'colorScheme'>
 ): TLStoreWithStatus | null {
-  // Build the WebSocket URI with auth token - memoize based on userId
+  // Build the WebSocket URI with auth token - memoize based on boardId
   const uri = useMemo(() => {
-    if (!userId) return null;
+    if (!boardId) return null;
 
     const token = getAuthToken();
     if (!token) return null;
 
-    return `${WS_URL}?token=${encodeURIComponent(token)}`;
-  }, [userId]);
+    return `${WS_URL}?token=${encodeURIComponent(token)}&boardId=${encodeURIComponent(boardId)}`;
+  }, [boardId]);
 
   // Memoize shapeUtils - must include default utils for proper migration support
   const shapeUtils = useMemo(

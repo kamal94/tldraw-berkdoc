@@ -53,49 +53,45 @@ export class BoardsRoomManager {
   constructor(private readonly databaseService: DatabaseService) {}
 
   /**
-   * Get or create a TLSocketRoom for a user.
-   * If the user has a board in the database, load it.
-   * If not, create a new board and room.
+   * Get or create a TLSocketRoom for a board.
+   * Loads the board snapshot from the database if it exists.
    */
-  async getOrCreateRoom(userId: string): Promise<TLSocketRoom<UnknownRecord>> {
+  async getOrCreateRoom(boardId: string): Promise<TLSocketRoom<UnknownRecord>> {
     // Check if room already exists in memory
-    const existingRoom = this.rooms.get(userId);
+    const existingRoom = this.rooms.get(boardId);
     if (existingRoom && !existingRoom.isClosed()) {
       return existingRoom;
     }
 
     // Load board from database
-    const boardRow = this.databaseService.findBoardByUserId(userId);
+    const boardRow = this.databaseService.findBoardById(boardId);
     let initialSnapshot: RoomSnapshot | undefined;
 
-    if (boardRow) {
-      // Parse existing snapshot
-      if (boardRow.snapshot) {
-        try {
-          initialSnapshot = JSON.parse(boardRow.snapshot) as RoomSnapshot;
-          this.logger.log(`Loaded board snapshot for user ${userId}`);
-        } catch (error) {
-          this.logger.error(`Failed to parse snapshot for user ${userId}:`, error);
-        }
+    if (!boardRow) {
+      this.logger.error(`Board ${boardId} not found in database`);
+      throw new Error(`Board ${boardId} not found`);
+    }
+
+    if (boardRow.snapshot) {
+      try {
+        initialSnapshot = JSON.parse(boardRow.snapshot) as RoomSnapshot;
+        this.logger.log(`Loaded board snapshot for board ${boardId}`);
+      } catch (error) {
+        this.logger.error(`Failed to parse snapshot for board ${boardId}:`, error);
       }
-    } else {
-      // Create new board in database
-      const boardId = crypto.randomUUID();
-      this.databaseService.createBoard({ id: boardId, userId });
-      this.logger.log(`Created new board ${boardId} for user ${userId}`);
     }
 
     // Create debounced persist function
     const persistSnapshot = debounce(() => {
-      const room = this.rooms.get(userId);
+      const room = this.rooms.get(boardId);
       if (room && !room.isClosed()) {
         const snapshot = room.getCurrentSnapshot();
-        this.databaseService.updateBoardSnapshot(userId, JSON.stringify(snapshot));
-        this.logger.debug(`Persisted snapshot for user ${userId}`);
+        this.databaseService.updateBoardSnapshot(boardId, JSON.stringify(snapshot));
+        this.logger.debug(`Persisted snapshot for board ${boardId}`);
       }
     }, 1000);
 
-    this.persistFns.set(userId, persistSnapshot);
+    this.persistFns.set(boardId, persistSnapshot);
 
     // Create the room (uses default tldraw schema)
     const room = new TLSocketRoom<UnknownRecord>({
@@ -111,7 +107,7 @@ export class BoardsRoomManager {
       },
       onSessionRemoved: (_room, { sessionId, numSessionsRemaining }) => {
         this.logger.log(
-          `Session ${sessionId} removed from user ${userId}'s room. ` +
+          `Session ${sessionId} removed from board ${boardId}'s room. ` +
             `${numSessionsRemaining} sessions remaining.`
         );
 
@@ -120,21 +116,21 @@ export class BoardsRoomManager {
       },
     });
 
-    this.rooms.set(userId, room);
-    this.logger.log(`Created room for user ${userId}`);
+    this.rooms.set(boardId, room);
+    this.logger.log(`Created room for board ${boardId}`);
 
     return room;
   }
 
   /**
-   * Get an existing room for a user.
+   * Get an existing room for a board.
    * Returns undefined if no room exists.
    */
-  getRoom(userId: string): TLSocketRoom<UnknownRecord> | undefined {
-    const room = this.rooms.get(userId);
+  getRoom(boardId: string): TLSocketRoom<UnknownRecord> | undefined {
+    const room = this.rooms.get(boardId);
     if (room && room.isClosed()) {
-      this.rooms.delete(userId);
-      this.persistFns.delete(userId);
+      this.rooms.delete(boardId);
+      this.persistFns.delete(boardId);
       return undefined;
     }
     return room;
@@ -143,25 +139,25 @@ export class BoardsRoomManager {
   /**
    * Dispose of a room and persist its final state.
    */
-  disposeRoom(userId: string): void {
-    const room = this.rooms.get(userId);
+  disposeRoom(boardId: string): void {
+    const room = this.rooms.get(boardId);
     if (room && !room.isClosed()) {
       // Final persist before closing
       const snapshot = room.getCurrentSnapshot();
-      this.databaseService.updateBoardSnapshot(userId, JSON.stringify(snapshot));
+      this.databaseService.updateBoardSnapshot(boardId, JSON.stringify(snapshot));
       room.close();
     }
-    this.rooms.delete(userId);
-    this.persistFns.delete(userId);
-    this.logger.log(`Disposed room for user ${userId}`);
+    this.rooms.delete(boardId);
+    this.persistFns.delete(boardId);
+    this.logger.log(`Disposed room for board ${boardId}`);
   }
 
   /**
-   * Get all active room user IDs.
+   * Get all active room board IDs.
    */
-  getActiveRoomUserIds(): string[] {
-    return Array.from(this.rooms.keys()).filter((userId) => {
-      const room = this.rooms.get(userId);
+  getActiveRoomBoardIds(): string[] {
+    return Array.from(this.rooms.keys()).filter((boardId) => {
+      const room = this.rooms.get(boardId);
       return room && !room.isClosed();
     });
   }
@@ -170,8 +166,8 @@ export class BoardsRoomManager {
    * Dispose all rooms (for shutdown).
    */
   disposeAllRooms(): void {
-    for (const userId of this.rooms.keys()) {
-      this.disposeRoom(userId);
+    for (const boardId of this.rooms.keys()) {
+      this.disposeRoom(boardId);
     }
   }
 }

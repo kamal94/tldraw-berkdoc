@@ -159,7 +159,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS boards (
         id TEXT PRIMARY KEY,
-        user_id TEXT UNIQUE NOT NULL,
+        user_id TEXT NOT NULL,
         name TEXT NOT NULL,
         snapshot TEXT,
         created_at TEXT NOT NULL,
@@ -183,6 +183,44 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         "ALTER TABLE boards ADD COLUMN name TEXT NOT NULL DEFAULT 'My Board'",
       );
       this.logger.log('Added name column to boards table');
+    }
+
+    this.migrateBoardsUserIdConstraint();
+  }
+
+  private migrateBoardsUserIdConstraint() {
+    const tableSql = this.db
+      .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'boards'`)
+      .get() as { sql?: string } | undefined;
+
+    if (!tableSql?.sql) return;
+    if (!/user_id\s+TEXT\s+UNIQUE/i.test(tableSql.sql)) return;
+
+    this.logger.log('Removing UNIQUE constraint from boards.user_id');
+
+    this.db.exec('BEGIN');
+    try {
+      this.db.exec('ALTER TABLE boards RENAME TO boards_old');
+      this.db.exec(`
+        CREATE TABLE boards (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          snapshot TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+      `);
+      this.db.exec(`
+        INSERT INTO boards (id, user_id, name, snapshot, created_at, updated_at)
+        SELECT id, user_id, name, snapshot, created_at, updated_at FROM boards_old
+      `);
+      this.db.exec('DROP TABLE boards_old');
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      this.logger.error('Failed to migrate boards.user_id constraint', error);
     }
   }
 
@@ -529,6 +567,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       content_last_analyzed: firstRow.content_last_analyzed,
       mime_type: firstRow.mime_type ?? null,
       mime_type_classification: firstRow.mime_type_classification ?? null,
+      size_bytes: firstRow.size_bytes ?? null,
       created_at: firstRow.created_at,
       updated_at: firstRow.updated_at,
     };
@@ -649,21 +688,37 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return stmt.get(id) as BoardRow | null;
   }
 
-  findBoardByUserId(userId: string): BoardRow | null {
-    const stmt = this.db.prepare('SELECT * FROM boards WHERE user_id = ?');
-    return stmt.get(userId) as BoardRow | null;
+  findBoardsByUserId(userId: string): BoardRow[] {
+    const stmt = this.db.prepare(
+      'SELECT * FROM boards WHERE user_id = ? ORDER BY updated_at DESC',
+    );
+    return stmt.all(userId) as BoardRow[];
   }
 
-  updateBoardSnapshot(userId: string, snapshot: string) {
+  updateBoardSnapshot(boardId: string, snapshot: string) {
     const now = new Date().toISOString();
     const stmt = this.db.prepare(`
       UPDATE boards SET snapshot = $snapshot, updated_at = $updatedAt
-      WHERE user_id = $userId
+      WHERE id = $boardId
     `);
 
     stmt.run({
-      $userId: userId,
+      $boardId: boardId,
       $snapshot: snapshot,
+      $updatedAt: now,
+    });
+  }
+
+  updateBoardName(boardId: string, name: string) {
+    const now = new Date().toISOString();
+    const stmt = this.db.prepare(`
+      UPDATE boards SET name = $name, updated_at = $updatedAt
+      WHERE id = $boardId
+    `);
+
+    stmt.run({
+      $boardId: boardId,
+      $name: name,
       $updatedAt: now,
     });
   }
@@ -671,11 +726,6 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   deleteBoard(id: string) {
     const stmt = this.db.prepare('DELETE FROM boards WHERE id = ?');
     stmt.run(id);
-  }
-
-  deleteBoardByUserId(userId: string) {
-    const stmt = this.db.prepare('DELETE FROM boards WHERE user_id = ?');
-    stmt.run(userId);
   }
 
   // Document duplicate operations
