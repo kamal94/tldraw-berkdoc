@@ -11,26 +11,43 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center">
+    <div 
+      className="fixed inset-0 z-[10000] flex items-center justify-center"
+      style={{ pointerEvents: 'auto' }}
+      onClick={(e) => {
+        // Close modal if clicking on backdrop
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+    >
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/50"
-        onClick={onClose}
+        style={{ pointerEvents: 'auto' }}
       />
 
       {/* Modal */}
-      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+      <div 
+        className="relative bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
+        style={{ pointerEvents: 'auto' }}
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Close button */}
         <button
-          onClick={onClose}
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
           className="absolute top-4 right-4 p-1 text-gray-400 hover:text-gray-600 transition-colors"
+          style={{ pointerEvents: 'auto' }}
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
 
-        <div className="p-8">
+        <div className="p-8" style={{ pointerEvents: 'auto' }}>
           {/* Logo */}
           <div className="flex items-center justify-center gap-2 mb-4">
             <div className="w-8 h-8 bg-black rounded flex items-center justify-center">
@@ -46,8 +63,12 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
           {/* Google Sign In */}
           <button
-            onClick={loginWithGoogle}
+            onClick={(e) => {
+              e.stopPropagation();
+              loginWithGoogle();
+            }}
             className="w-full py-3 px-4 bg-[#1a73e8] hover:bg-[#1557b0] text-white font-medium rounded-lg flex items-center justify-center gap-3 transition-colors"
+            style={{ pointerEvents: 'auto' }}
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#fff" />
@@ -60,9 +81,23 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
           {/* Footer */}
           <p className="mt-6 text-center text-xs text-gray-400">
-            <a href="#" className="text-blue-500 hover:underline">Terms of Use</a>
+            <a 
+              href="#" 
+              className="text-blue-500 hover:underline"
+              onClick={(e) => e.stopPropagation()}
+              style={{ pointerEvents: 'auto' }}
+            >
+              Terms of Use
+            </a>
             {' · '}
-            <a href="#" className="text-blue-500 hover:underline">Privacy Policy</a>
+            <a 
+              href="#" 
+              className="text-blue-500 hover:underline"
+              onClick={(e) => e.stopPropagation()}
+              style={{ pointerEvents: 'auto' }}
+            >
+              Privacy Policy
+            </a>
           </p>
         </div>
       </div>

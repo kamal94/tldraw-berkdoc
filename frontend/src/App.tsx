@@ -1,6 +1,6 @@
 // ALWAYS KEEP THIS FILE AS SIMPLE AS POSSIBLE. DO NOT FILL IT WITH IMPLEMENTATION DETAILS.
 import { useMemo, useState } from "react";
-import { Tldraw } from "tldraw";
+import { Tldraw, type TLComponents } from "tldraw";
 import "tldraw/tldraw.css";
 import { DocumentShapeUtil } from "./shapes/DocumentShape";
 import { AnimationProvider } from "./contexts/AnimationProvider";
@@ -9,9 +9,8 @@ import { WebSocketProvider } from "./contexts/WebSocketProvider";
 import { OnboardingProvider } from "./contexts/OnboardingProvider";
 import { useAuth } from "./hooks/useAuth";
 import { ConfigPanel } from "./components/ConfigPanel";
-import { SignInButton } from "./components/SignInButton";
 import { SmartExplorer } from "./components/SmartExplorer";
-import { UserMenu } from "./components/UserMenu";
+import { SharePanel } from "./components/SharePanel";
 import { DuplicatesPage } from "./components/DuplicatesPage";
 import { OnboardingWizard } from "./components/onboarding/OnboardingWizard";
 import { useBoardSync } from "./hooks/useBoardSync";
@@ -19,7 +18,7 @@ import { useBoardSync } from "./hooks/useBoardSync";
 const customShapeUtils = [DocumentShapeUtil];
 
 // Component for authenticated users - uses sync
-function AuthenticatedTldraw({ userId }: { userId: string }) {
+function AuthenticatedTldraw({ userId, components }: { userId: string; components: TLComponents }) {
   // Hooks must be called before any early returns
   const syncStore = useBoardSync(userId);
 
@@ -71,6 +70,7 @@ function AuthenticatedTldraw({ userId }: { userId: string }) {
       <Tldraw
         store={syncStore}
         shapeUtils={customShapeUtils}
+        components={components}
         options={{
           maxShapesPerPage: 100 * 1000,
         }}
@@ -90,13 +90,14 @@ function AuthenticatedTldraw({ userId }: { userId: string }) {
 }
 
 // Component for guest users - uses localStorage
-function GuestTldraw() {
+function GuestTldraw({ components }: { components: TLComponents }) {
   const guestPersistenceKey = "berkdoc-guest";
   
   return (
     <Tldraw
       persistenceKey={guestPersistenceKey}
       shapeUtils={customShapeUtils}
+      components={components}
       options={{
         maxShapesPerPage: 100 * 1000,
       }}
@@ -111,6 +112,11 @@ function AppContents() {
   // Memoize userId to prevent unnecessary re-renders
   const userId = useMemo(() => (isAuthenticated ? user?.id : undefined), [isAuthenticated, user?.id]);
   
+  // Create components object with SharePanel
+  const components: TLComponents = useMemo(() => ({
+    SharePanel: () => <SharePanel onViewDuplicates={() => setShowDuplicates(true)} />,
+  }), []);
+  
   // If showing duplicates, render only DuplicatesPage (no Tldraw)
   if (showDuplicates) {
     return (
@@ -124,14 +130,12 @@ function AppContents() {
   return (
     <div style={{ position: "fixed", inset: 0 }}>
       {isAuthenticated && userId ? (
-        <AuthenticatedTldraw userId={userId} />
+        <AuthenticatedTldraw userId={userId} components={components} />
       ) : (
-        <GuestTldraw />
+        <GuestTldraw components={components} />
       )}
       <ConfigPanel />
-      <SignInButton />
       {isAuthenticated && <SmartExplorer />}
-      {isAuthenticated && <UserMenu onViewDuplicates={() => setShowDuplicates(true)} />}
       {/* Onboarding wizard modal for new users */}
       {isAuthenticated && <OnboardingWizard />}
     </div>
