@@ -69,6 +69,7 @@ export class BoardsGateway implements OnModuleInit, OnModuleDestroy {
 
     const userId = await this.authenticateConnection(token);
     if (!userId) {
+      socket.close(4001, 'Authentication failed');
       return;
     }
 
