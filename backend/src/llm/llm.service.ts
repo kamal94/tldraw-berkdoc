@@ -1,14 +1,17 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { buildSummaryPrompt, buildTagsPrompt } from "./prompts.js";
 import { parseSummary, parseTags } from "./parsers.js";
+import { LLM_PROVIDER } from "./llm.tokens.js";
+import type { LlmProvider } from "./providers/llm-provider.interface.js";
 
 const MAX_CONTENT_LENGTH = 500_000; // 500KB in characters, as JS strings are UTF-16, exact bytes may vary
 @Injectable()
 export class LlmService {
   private readonly logger = new Logger(LlmService.name);
-  private readonly ollamaBaseUrl =
-    process.env.OLLAMA_BASE_URL || "http://localhost:11434";
-  private readonly ollamaModel = process.env.OLLAMA_MODEL || "gemma3:12b";
+
+  constructor(
+    @Inject(LLM_PROVIDER) private readonly provider: LlmProvider
+  ) {}
 
   /**
    * Call Ollama API directly to generate text
@@ -21,33 +24,11 @@ export class LlmService {
     }
   ): Promise<string> {
     try {
-      const response = await fetch(`${this.ollamaBaseUrl}/api/generate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: this.ollamaModel,
-          prompt,
-          options: {
-            num_predict: options?.max_tokens,
-            temperature: options?.temperature ?? 0.7,
-          },
-          stream: false,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Ollama API error: ${response.status} - ${errorText}`);
-      }
-
-      const data = await response.json();
-      return data.response?.trim() || "";
+      return await this.provider.generateCompletion(prompt, options);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      this.logger.error("Failed to call Ollama API", errorMessage);
+      this.logger.error("Failed to call LLM provider", errorMessage);
       throw error;
     }
   }

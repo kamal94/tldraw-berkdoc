@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Database } from 'bun:sqlite';
 import weaviate, { Filters } from 'weaviate-client';
 import * as dotenv from 'dotenv';
@@ -11,6 +12,26 @@ const WEAVIATE_HOST = process.env.WEAVIATE_HOST || 'localhost';
 const WEAVIATE_PORT = parseInt(process.env.WEAVIATE_PORT || '8080');
 const COLLECTION_NAME = 'DocumentChunk';
 
+/**
+ * Resolves a user identifier (email or userId) to a userId.
+ * Returns the userId if found, or throws an error if not found.
+ */
+function resolveUserId(db: Database, identifier: string): string {
+  // Check if it's already a userId (numeric or UUID)
+  const userById = db.query('SELECT id FROM users WHERE id = ?').get(identifier) as any;
+  if (userById) {
+    return identifier;
+  }
+
+  // Check if it's an email address
+  const userByEmail = db.query('SELECT id FROM users WHERE email = ?').get(identifier) as any;
+  if (userByEmail) {
+    return userByEmail.id;
+  }
+
+  throw new Error(`User not found: ${identifier} (tried as userId and email)`);
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const command = args[0];
@@ -22,15 +43,15 @@ Usage:
 
 Commands:
   list-users            List all users
-  list-docs [userId]    List all documents (optionally filtered by userId)
-  list-boards [userId]  List all boards (optionally filtered by userId)
+  list-docs [userId|email]    List all documents (optionally filtered by userId or email)
+  list-boards [userId|email]  List all boards (optionally filtered by userId or email)
   stats                 Show stats for database and Weaviate
-  ingest-test <userId>  Ingest some dummy test data
-  clear-user <userId>   Delete all documents and chunks for a user
+  ingest-test <userId|email>  Ingest some dummy test data
+  clear-user <userId|email>   Delete all documents and chunks for a user
   clear-doc <docId>     Delete a specific document and its chunks
-  clear-board <userId>  Delete a board for a specific user
-  clear-onboarding <userId>  Clear onboarding data for a user
-  clear-duplicates <userId>  Clear all duplicates for a user
+  clear-board <userId|email>  Delete a board for a specific user
+  clear-onboarding <userId|email>  Clear onboarding data for a user
+  clear-duplicates <userId|email>  Clear all duplicates for a user
   clear-all-duplicates  Clear all duplicates from database
   clear-all             Clear all documents and all chunks from Weaviate
   clear-all-boards      Clear all boards from database
@@ -52,33 +73,33 @@ Commands:
         listUsers(db);
         break;
       case 'list-docs':
-        listDocs(db, args[1]);
+        listDocs(db, args[1] ? resolveUserId(db, args[1]) : undefined);
         break;
       case 'list-boards':
-        listBoards(db, args[1]);
+        listBoards(db, args[1] ? resolveUserId(db, args[1]) : undefined);
         break;
       case 'stats':
         await showStats(db, client);
         break;
       case 'ingest-test':
-        if (!args[1]) throw new Error('userId is required');
-        await ingestTestData(db, client, args[1]);
+        if (!args[1]) throw new Error('userId or email is required');
+        await ingestTestData(db, client, resolveUserId(db, args[1]));
         break;
       case 'clear-user':
-        if (!args[1]) throw new Error('userId is required');
-        await clearUser(db, client, args[1]);
+        if (!args[1]) throw new Error('userId or email is required');
+        await clearUser(db, client, resolveUserId(db, args[1]));
         break;
       case 'clear-doc':
         if (!args[1]) throw new Error('docId is required');
         await clearDoc(db, client, args[1]);
         break;
       case 'clear-board':
-        if (!args[1]) throw new Error('userId is required');
-        await clearBoard(db, args[1]);
+        if (!args[1]) throw new Error('userId or email is required');
+        await clearBoard(db, resolveUserId(db, args[1]));
         break;
       case 'clear-onboarding':
-        if (!args[1]) throw new Error('userId is required');
-        clearOnboarding(db, args[1]);
+        if (!args[1]) throw new Error('userId or email is required');
+        clearOnboarding(db, resolveUserId(db, args[1]));
         break;
       case 'clear-all':
         await clearAll(db, client);
@@ -87,8 +108,8 @@ Commands:
         await clearAllBoards(db);
         break;
       case 'clear-duplicates':
-        if (!args[1]) throw new Error('userId is required');
-        await clearDuplicates(db, args[1]);
+        if (!args[1]) throw new Error('userId or email is required');
+        await clearDuplicates(db, resolveUserId(db, args[1]));
         break;
       case 'clear-all-duplicates':
         await clearAllDuplicates(db);

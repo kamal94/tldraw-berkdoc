@@ -31,6 +31,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@google/genai": "^1.37.0",
     "@nestjs/common": "^11.1.11",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.1.11",
@@ -47,12 +48,14 @@
     "class-validator": "^0.14.3",
     "fractional-indexing": "^3.2.0",
     "googleapis": "^169.0.0",
+    "openai": "^6.16.0",
     "p-limit": "^3.1.0",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "passport-jwt": "^4.0.1",
     "pdf-parse": "^2.4.5",
     "reflect-metadata": "^0.2.2",
+    "runpod-sdk": "^1.1.2",
     "rxjs": "^7.8.2",
     "weaviate-client": "^3.10.0",
     "ws": "^8.19.0",

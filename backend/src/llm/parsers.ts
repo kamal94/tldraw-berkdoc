@@ -8,13 +8,18 @@ import {
   SummaryResponseSchema,
   TagsResponseSchema,
 } from "./schemas.js";
+import { Logger } from "@nestjs/common";
+
+const logger = new Logger(parseSummary.name);
 
 /**
  * Parse a summary response from the model
  * First tries to parse as JSON using Zod schema, then falls back to legacy parsing
  */
 export function parseSummary(response: string): string {
+  logger.log(`Parsing summary response: ${JSON.stringify(response, null, 2)}`);
   if (!response || typeof response !== 'string') {
+    logger.error(`Invalid response: ${JSON.stringify(response, null, 2)}`);
     return '';
   }
 
@@ -33,6 +38,7 @@ export function parseSummary(response: string): string {
   } catch {
     // If JSON parsing fails, fall back to returning empty string
   }
+  logger.error(`Failed to parse summary response: ${response}`);
   return '';
 }
 
