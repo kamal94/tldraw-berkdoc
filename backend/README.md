@@ -38,6 +38,16 @@ cp .env.example .env
 Update `.env` with your settings:
 - `JWT_SECRET`: A secure secret for JWT signing
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`: From Google Cloud Console (optional, for OAuth)
+- `LLM_PROVIDER`: `ollama`, `jarvis`, `runpod`, or `gemini` (defaults to `ollama`)
+- `OLLAMA_BASE_URL`: Ollama base URL (defaults to `http://localhost:11434`)
+- `OLLAMA_MODEL`: Ollama model name (defaults to `gemma3:12b`)
+- `JARVIS_API_KEY`: Jarvis Labs API key
+- `JARVIS_DEPLOYMENT_ID`: Jarvis Labs deployment ID
+- `JARVIS_MODEL`: Jarvis model name (defaults to `gemma3:12b`)
+- `RUNPOD_API_KEY`: RunPod API key
+- `RUNPOD_ENDPOINT_ID`: RunPod endpoint ID
+- `GEMINI_API_KEY`: Google Gemini API key (required for Gemini provider)
+- `GEMINI_MODEL`: Gemini model name (defaults to `gemini-2.5-flash-lite`)
 
 ### 3. Install Dependencies
 
