@@ -1,90 +1,96 @@
 import { useMemo } from "react";
 import { useSync } from "@tldraw/sync";
-import type { TLStoreWithStatus, TLAsset, TLAssetContext, TLUserPreferences } from "tldraw";
+import type { TLStoreWithStatus, TLAsset, TLUserPreferences } from "tldraw";
 import { defaultShapeUtils, defaultBindingUtils } from "tldraw";
 import { DocumentShapeUtil } from "../shapes/DocumentShape";
+import { getAuthToken } from "../api/api-utils";
 
 const WS_URL = import.meta.env.VITE_WS_URL || "ws://localhost:3001";
 
 /**
- * Get the auth token from localStorage
+ * Build WebSocket URI with authentication token and board ID
  */
-function getAuthToken(): string | null {
-  return localStorage.getItem("auth_token");
+function buildWebSocketUri(boardId: string): string | null {
+  const token = getAuthToken();
+  if (!token) return null;
+
+  return `${WS_URL}?token=${encodeURIComponent(token)}&boardId=${encodeURIComponent(boardId)}`;
+}
+
+/**
+ * Create assets handler for tldraw
+ */
+function createAssetsHandler() {
+  return {
+    upload: async (_asset: unknown, file: File): Promise<{ src: string }> => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          resolve({ src: reader.result as string });
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    },
+    resolve: (asset: TLAsset): string | null => {
+      return (asset as { props?: { src?: string | null } }).props?.src ?? null;
+    },
+  };
 }
 
 /**
  * Hook to sync tldraw store with the server via WebSocket.
  * Returns a store that can be passed to the Tldraw component.
- * Returns null when not authenticated (use localStorage persistence instead).
+ * Returns null when boardId is missing or not authenticated.
  *
- * @param boardId - The active board ID (undefined if not selected)
+ * @param boardId - The active board ID (required for sync)
  * @param userInfo - The user preferences/info to pass to sync (optional)
  */
 export function useBoardSync(
   boardId: string | undefined,
   userInfo?: Pick<TLUserPreferences, 'id' | 'name' | 'color' | 'colorScheme'>
 ): TLStoreWithStatus | null {
-  // Build the WebSocket URI with auth token - memoize based on boardId
   const uri = useMemo(() => {
     if (!boardId) return null;
-
-    const token = getAuthToken();
-    if (!token) return null;
-
-    return `${WS_URL}?token=${encodeURIComponent(token)}&boardId=${encodeURIComponent(boardId)}`;
+    return buildWebSocketUri(boardId);
   }, [boardId]);
 
-  // Memoize shapeUtils - must include default utils for proper migration support
   const shapeUtils = useMemo(
     () => [DocumentShapeUtil, ...defaultShapeUtils],
     []
   );
 
-  // Include default binding utils for arrow bindings, etc.
   const bindingUtils = useMemo(() => [...defaultBindingUtils], []);
 
-  // Memoize the assets object to prevent recreation on every render
-  const assets = useMemo(
-    () => ({
-      upload: async (_asset: unknown, file: File): Promise<{ src: string }> => {
-        // For now, store assets as base64 inline
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            resolve({ src: reader.result as string });
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-      },
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      resolve: (asset: TLAsset, _ctx: TLAssetContext): string | null => {
-        return (asset as { props?: { src?: string | null } }).props?.src ?? null;
-      },
-    }),
-    []
-  );
+  const assets = useMemo(() => createAssetsHandler(), []);
 
-  // Memoize the sync config to prevent recreation on every render
-  // Note: uri should never be null when this hook is called (only called from AuthenticatedTldraw)
-  // We use non-null assertion since App.tsx ensures this hook is only called when authenticated
-  const syncConfig = useMemo(
-    () => ({
-      uri: uri!,
+  const syncConfig = useMemo(() => {
+    if (!uri) return null;
+
+    return {
+      uri,
       shapeUtils,
       bindingUtils,
       assets,
       ...(userInfo && { userInfo }),
-    }),
-    [uri, shapeUtils, bindingUtils, assets, userInfo]
+    };
+  }, [uri, shapeUtils, bindingUtils, assets, userInfo]);
+
+  // Always call useSync hook (React hooks must be called unconditionally)
+  // Pass a dummy config if uri is null - useSync will handle the error state
+  const store = useSync(
+    syncConfig ?? {
+      uri: '',
+      shapeUtils,
+      bindingUtils,
+      assets,
+    }
   );
 
-  // Call useSync with the config
-  // Note: This hook should only be called when authenticated (uri is not null)
-  // App.tsx ensures this by conditionally rendering AuthenticatedTldraw component
-  const store = useSync(syncConfig);
+  // Return null if we don't have a valid URI, otherwise return the store
+  if (!uri) {
+    return null;
+  }
 
-  // Type assertion for cross-package compatibility
   return store as unknown as TLStoreWithStatus;
 }
