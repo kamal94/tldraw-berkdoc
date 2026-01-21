@@ -8,6 +8,7 @@ import type { Contributor } from "@shared/document-shape.types";
 
 // Number of tags to show before collapsing
 const VISIBLE_TAGS_COUNT = 2;
+const VISIBLE_CONTRIBUTORS_COUNT = 3;
 
 /**
  * Generate user initials from name
@@ -27,11 +28,11 @@ function TagPill({ tag }: { tag: string }) {
     <span
       style={{
         display: "inline-block",
-        padding: "2px 8px",
+        padding: "1px 6px",
         backgroundColor: "rgba(99, 102, 241, 0.12)",
         color: "#4F46E5",
         borderRadius: "12px",
-        fontSize: "11px",
+        fontSize: "10px",
         fontWeight: 500,
         whiteSpace: "nowrap",
         border: "1px solid rgba(99, 102, 241, 0.2)",
@@ -66,11 +67,11 @@ function MoreTagsBadge({
       <span
         style={{
           display: "inline-block",
-          padding: "2px 8px",
+          padding: "1px 6px",
           backgroundColor: "rgba(107, 114, 128, 0.12)",
           color: "#6B7280",
           borderRadius: "12px",
-          fontSize: "11px",
+          fontSize: "10px",
           fontWeight: 500,
           cursor: "pointer",
           border: "1px solid rgba(107, 114, 128, 0.2)",
@@ -116,7 +117,7 @@ function MoreTagsBadge({
                 key={tag}
                 style={{
                   display: "inline-block",
-                  padding: "2px 6px",
+                  padding: "1px 6px",
                   backgroundColor: "rgba(99, 102, 241, 0.25)",
                   color: "#A5B4FC",
                   borderRadius: "8px",
@@ -128,6 +129,103 @@ function MoreTagsBadge({
             ))}
           </div>
           {/* Tooltip arrow */}
+          <div
+            style={{
+              position: "absolute",
+              bottom: "-6px",
+              left: "50%",
+              transform: "translateX(-50%)",
+              width: 0,
+              height: 0,
+              borderLeft: "6px solid transparent",
+              borderRight: "6px solid transparent",
+              borderTop: "6px solid #1F2937",
+            }}
+          />
+        </div>
+      )}
+    </span>
+  );
+}
+
+function MoreContributorsBadge({
+  count,
+  hiddenContributors,
+}: {
+  count: number;
+  hiddenContributors: Contributor[];
+}) {
+  const [showTooltip, setShowTooltip] = useState(false);
+
+  return (
+    <span
+      style={{
+        position: "relative",
+        display: "inline-block",
+        pointerEvents: "all",
+      }}
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      <span
+        style={{
+          width: "26px",
+          height: "26px",
+          borderRadius: "50%",
+          backgroundColor: "#E5E7EB",
+          border: "2px solid white",
+          marginLeft: "-8px",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "#6B7280",
+          fontSize: "10px",
+          fontWeight: 600,
+          cursor: "pointer",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.12)",
+        zIndex: 0,
+        }}
+        title={`${count} more contributors`}
+      >
+        +{count}
+      </span>
+
+      {showTooltip && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: "calc(100% + 8px)",
+            left: "50%",
+            transform: "translateX(-50%)",
+            backgroundColor: "#1F2937",
+            color: "#F9FAFB",
+            padding: "10px 12px",
+            borderRadius: "8px",
+            fontSize: "11px",
+            boxShadow: "0 10px 25px rgba(0,0,0,0.25)",
+            zIndex: 1000,
+            minWidth: "180px",
+            maxWidth: "280px",
+          }}
+        >
+          <div
+            style={{
+              fontWeight: 600,
+              marginBottom: "6px",
+              color: "#9CA3AF",
+              fontSize: "10px",
+              textTransform: "uppercase",
+              letterSpacing: "0.5px",
+            }}
+          >
+            Additional Contributors
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+            {hiddenContributors.map((contributor) => (
+              <span key={contributor.name}>{contributor.name}</span>
+            ))}
+          </div>
           <div
             style={{
               position: "absolute",
@@ -209,6 +307,9 @@ function ContributorAvatar({
 export function DocumentCard({ shape }: { shape: DocumentShape }) {
   const { w, h, title, url, source, contributors, tags, summary } = shape.props;
   const { isAddLifeEnabled } = useAnimation();
+  const hasTags = tags.length > 0;
+  const hasContributors = contributors.length > 0;
+  const hasFooter = hasTags || hasContributors;
 
   // Use useState to get stable random values for animation
   const [animationParams] = useState(() => {
@@ -229,6 +330,9 @@ export function DocumentCard({ shape }: { shape: DocumentShape }) {
 
   const visibleTags = tags.slice(0, VISIBLE_TAGS_COUNT);
   const hiddenTagsCount = tags.length - VISIBLE_TAGS_COUNT;
+  const visibleContributors = contributors.slice(0, VISIBLE_CONTRIBUTORS_COUNT);
+  const hiddenContributors = contributors.slice(VISIBLE_CONTRIBUTORS_COUNT);
+  const hiddenContributorsCount = hiddenContributors.length;
 
   const handleOpenUrl = (e: React.MouseEvent | React.PointerEvent) => {
     e.stopPropagation();
@@ -250,7 +354,7 @@ export function DocumentCard({ shape }: { shape: DocumentShape }) {
           border: "1px solid rgba(0,0,0,0.06)",
           display: "flex",
           flexDirection: "column",
-          padding: "14px 16px",
+          padding: "12px 14px",
           fontFamily:
             'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
           boxSizing: "border-box",
@@ -264,7 +368,7 @@ export function DocumentCard({ shape }: { shape: DocumentShape }) {
             alignItems: "flex-start",
             justifyContent: "space-between",
             gap: "8px",
-            marginBottom: "12px",
+            marginBottom: "10px",
           }}
         >
           <div
@@ -341,12 +445,13 @@ export function DocumentCard({ shape }: { shape: DocumentShape }) {
               fontSize: "12px",
               lineHeight: "1.4",
               color: "#4B5563",
-              marginBottom: "12px",
               display: "-webkit-box",
-              WebkitLineClamp: 2,
+              WebkitLineClamp: 3,
               WebkitBoxOrient: "vertical",
               overflow: "hidden",
               fontStyle: "italic",
+              minHeight: "36px",
+              maxHeight: "50px",
             }}
             title={summary}
           >
@@ -354,41 +459,54 @@ export function DocumentCard({ shape }: { shape: DocumentShape }) {
           </div>
         )}
 
-        {/* Tags section */}
-        {tags.length > 0 && (
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "6px",
-              marginBottom: "auto",
-            }}
-          >
-            {visibleTags.map((tag) => (
-              <TagPill key={tag} tag={tag} />
-            ))}
-            {hiddenTagsCount > 0 && (
-              <MoreTagsBadge count={hiddenTagsCount} allTags={tags} />
-            )}
-          </div>
-        )}
-
-        {/* Contributors section */}
-        {contributors.length > 0 && (
+        {/* Footer section */}
+        {hasFooter && (
           <div
             style={{
               display: "flex",
               alignItems: "center",
-              marginTop: "12px",
+              justifyContent: "space-between",
+              gap: "8px",
+              marginTop: "10px",
+              minHeight: 0,
             }}
           >
-            {contributors.map((contributor, index) => (
-              <ContributorAvatar
-                key={contributor.name}
-                contributor={contributor}
-                index={index}
-              />
-            ))}
+            {hasContributors && (
+              <div style={{ display: "flex", alignItems: "center" }}>
+                {visibleContributors.map((contributor, index) => (
+                  <ContributorAvatar
+                    key={contributor.name}
+                    contributor={contributor}
+                    index={index}
+                  />
+                ))}
+                {hiddenContributorsCount > 0 && (
+                  <MoreContributorsBadge
+                    count={hiddenContributorsCount}
+                    hiddenContributors={hiddenContributors}
+                  />
+                )}
+              </div>
+            )}
+
+            {hasTags && (
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "4px",
+                  justifyContent: "flex-end",
+                  marginLeft: "auto",
+                }}
+              >
+                {visibleTags.map((tag) => (
+                  <TagPill key={tag} tag={tag} />
+                ))}
+                {hiddenTagsCount > 0 && (
+                  <MoreTagsBadge count={hiddenTagsCount} allTags={tags} />
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
