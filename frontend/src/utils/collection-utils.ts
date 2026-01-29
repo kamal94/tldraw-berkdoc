@@ -1,6 +1,6 @@
 import type { Editor } from "tldraw";
 import { createShapeId } from "tldraw";
-import { toRichText } from "@tldraw/tlschema";
+import { toRichText, type TLParentId, type TLShapeId } from "@tldraw/tlschema";
 import type { DocumentShape } from "../shapes/DocumentShape";
 import type { CollectionShape } from "../shapes/CollectionShape";
 
@@ -8,11 +8,14 @@ type CollectionBounds = { x: number; y: number; w: number; h: number };
 
 export type CreateCollectionOptions = {
   label?: string;
-  documentIds?: string[];
+  documentIds?: TLShapeId[];
   padding?: number;
 };
 
 const DEFAULT_COLLECTION_SIZE = { w: 600, h: 400 };
+export const GRID_COLUMNS = 3;
+export const GRID_GAP = 16;
+export const COLLECTION_PADDING = 40;
 
 function isDocumentShape(shape: unknown): shape is DocumentShape {
   return Boolean(shape && (shape as { type?: string }).type === "document");
@@ -22,13 +25,13 @@ function isCollectionShape(shape: unknown): shape is CollectionShape {
   return Boolean(shape && (shape as { type?: string }).type === "collection");
 }
 
-function getCollectionShape(editor: Editor, collectionId: string) {
+function getCollectionShape(editor: Editor, collectionId: TLShapeId) {
   const shape = editor.getShape(collectionId);
   if (!isCollectionShape(shape)) return null;
   return shape;
 }
 
-function getDocumentShape(editor: Editor, documentId: string) {
+function getDocumentShape(editor: Editor, documentId: TLShapeId) {
   const shape = editor.getShape(documentId);
   if (!isDocumentShape(shape)) return null;
   return shape;
@@ -88,20 +91,130 @@ export function calculateCollectionBounds(
   };
 }
 
+export function calculateGridPosition(
+  index: number,
+  docWidth: number,
+  docHeight: number,
+  columns = GRID_COLUMNS,
+  gap = GRID_GAP,
+  padding = COLLECTION_PADDING
+) {
+  const column = index % columns;
+  const row = Math.floor(index / columns);
+
+  return {
+    x: padding + column * (docWidth + gap),
+    y: padding + row * (docHeight + gap),
+  };
+}
+
+export function calculateGridCollectionSize(
+  documentCount: number,
+  docWidth: number,
+  docHeight: number,
+  columns = GRID_COLUMNS,
+  gap = GRID_GAP,
+  padding = COLLECTION_PADDING
+) {
+  if (documentCount === 0) {
+    return { w: DEFAULT_COLLECTION_SIZE.w, h: DEFAULT_COLLECTION_SIZE.h };
+  }
+
+  const rows = Math.max(1, Math.ceil(documentCount / columns));
+  const w = padding * 2 + columns * docWidth + (columns - 1) * gap;
+  const h = padding * 2 + rows * docHeight + (rows - 1) * gap;
+
+  return { w, h };
+}
+
+export function getDropIndexFromPosition(
+  x: number,
+  y: number,
+  totalDocs: number,
+  docWidth: number,
+  docHeight: number,
+  columns = GRID_COLUMNS,
+  gap = GRID_GAP,
+  padding = COLLECTION_PADDING
+) {
+  const cellWidth = docWidth + gap;
+  const cellHeight = docHeight + gap;
+  const localX = Math.max(0, x - padding);
+  const localY = Math.max(0, y - padding);
+
+  const column = Math.min(columns - 1, Math.floor(localX / cellWidth));
+  const row = Math.max(0, Math.floor(localY / cellHeight));
+  const index = row * columns + column;
+
+  return Math.min(Math.max(index, 0), totalDocs);
+}
+
+export function repositionDocumentsInGrid(
+  editor: Editor,
+  collectionId: TLShapeId,
+  columns = GRID_COLUMNS,
+  gap = GRID_GAP,
+  padding = COLLECTION_PADDING
+) {
+  const collection = getCollectionShape(editor, collectionId);
+  if (!collection) return;
+
+  const documents = collection.props.documentIds
+    .map((id) => getDocumentShape(editor, id as TLShapeId))
+    .filter((shape): shape is DocumentShape => Boolean(shape));
+
+  if (documents.length === 0) return;
+
+  const { w: docWidth, h: docHeight } = documents[0].props;
+
+  const updates = documents
+    .map((doc, index) => {
+      const position = calculateGridPosition(
+        index,
+        docWidth,
+        docHeight,
+        columns,
+        gap,
+        padding
+      );
+      if (doc.x === position.x && doc.y === position.y) return null;
+      return {
+        id: doc.id,
+        type: "document" as const,
+        x: position.x,
+        y: position.y,
+      };
+    })
+    .filter(
+      (update): update is { id: TLShapeId; type: "document"; x: number; y: number } =>
+        Boolean(update)
+    );
+
+  if (updates.length > 0) {
+    editor.updateShapes(updates);
+  }
+}
+
 export function createCollection(editor: Editor, options: CreateCollectionOptions = {}) {
   const label = options.label ?? "New Collection";
-  const padding = options.padding ?? 40;
   const initialDocumentIds = options.documentIds ?? [];
 
   const documents = initialDocumentIds
     .map((id) => getDocumentShape(editor, id))
     .filter((shape): shape is DocumentShape => Boolean(shape));
 
-  const bounds = calculateCollectionBounds(documents, padding, editor);
+  const docSize = documents[0]?.props ?? { w: 300, h: 180 };
+  const gridSize = calculateGridCollectionSize(
+    documents.length,
+    docSize.w,
+    docSize.h
+  );
+
+  const bounds = calculateCollectionBounds(documents, COLLECTION_PADDING, editor);
   const center = getViewportCenter(editor);
 
-  const x = documents.length ? bounds.x : center.x - bounds.w / 2;
-  const y = documents.length ? bounds.y : center.y - bounds.h / 2;
+  const x = documents.length ? bounds.x : center.x - gridSize.w / 2;
+  const y = documents.length ? bounds.y : center.y - gridSize.h / 2;
 
   const collectionId = createShapeId();
   editor.createShape({
@@ -110,10 +223,10 @@ export function createCollection(editor: Editor, options: CreateCollectionOption
     x,
     y,
     props: {
-      w: bounds.w,
-      h: bounds.h,
+      w: gridSize.w,
+      h: gridSize.h,
       label,
-      documentIds: documents.map((doc) => doc.id),
+      documentIds: documents.map((doc) => doc.id) as unknown as string[],
     },
   });
 
@@ -121,7 +234,7 @@ export function createCollection(editor: Editor, options: CreateCollectionOption
   editor.createShape({
     id: labelId,
     type: "text",
-    parentId: collectionId,
+    parentId: collectionId as TLParentId,
     x: 16,
     y: -32,
     props: {
@@ -136,13 +249,24 @@ export function createCollection(editor: Editor, options: CreateCollectionOption
     },
   });
 
-  documents.forEach((doc) => {
+  documents.forEach((doc, index) => {
     if (typeof editor.reparentShapes === "function") {
-      editor.reparentShapes([doc.id], collectionId);
-      return;
+      editor.reparentShapes([doc.id], collectionId as TLParentId);
+    } else {
+      editor.updateShapes([
+        { id: doc.id, type: "document", parentId: collectionId as TLParentId },
+      ]);
     }
 
-    editor.updateShapes([{ id: doc.id, type: "document", parentId: collectionId }]);
+    const position = calculateGridPosition(index, docSize.w, docSize.h);
+    editor.updateShapes([
+      {
+        id: doc.id,
+        type: "document",
+        x: position.x,
+        y: position.y,
+      },
+    ]);
   });
 
   if (typeof editor.sendToBack === "function") {
@@ -154,8 +278,8 @@ export function createCollection(editor: Editor, options: CreateCollectionOption
 
 export function addDocumentToCollection(
   editor: Editor,
-  collectionId: string,
-  documentId: string
+  collectionId: TLShapeId,
+  documentId: TLShapeId
 ) {
   const collection = getCollectionShape(editor, collectionId);
   if (!collection) return;
@@ -163,8 +287,12 @@ export function addDocumentToCollection(
   const document = getDocumentShape(editor, documentId);
   if (!document) return;
 
-  if (!collection.props.documentIds.includes(documentId)) {
-    const nextDocumentIds = [...collection.props.documentIds, documentId];
+  const documentIdValue = documentId as unknown as string;
+  const nextDocumentIds = collection.props.documentIds.includes(documentIdValue)
+    ? collection.props.documentIds
+    : [...collection.props.documentIds, documentIdValue];
+
+  if (!collection.props.documentIds.includes(documentIdValue)) {
     editor.updateShapes([
       {
         id: collectionId,
@@ -175,18 +303,35 @@ export function addDocumentToCollection(
   }
 
   if (typeof editor.reparentShapes === "function") {
-    editor.reparentShapes([documentId], collectionId);
-    return;
+    editor.reparentShapes([documentId], collectionId as TLParentId);
+  } else {
+    editor.updateShapes([
+      { id: documentId, type: "document", parentId: collectionId as TLParentId },
+    ]);
   }
 
-  editor.updateShapes([{ id: documentId, type: "document", parentId: collectionId }]);
+  const docSize = document.props;
+  const position = calculateGridPosition(
+    nextDocumentIds.indexOf(documentIdValue),
+    docSize.w,
+    docSize.h
+  );
+
+  editor.updateShapes([
+    {
+      id: documentId,
+      type: "document",
+      x: position.x,
+      y: position.y,
+    },
+  ]);
 }
 
 export function removeDocumentFromCollection(
   editor: Editor,
-  collectionId: string,
-  documentId: string,
-  pageId: string
+  collectionId: TLShapeId,
+  documentId: TLShapeId,
+  pageId: TLParentId
 ) {
   const collection = getCollectionShape(editor, collectionId);
   if (!collection) return;
@@ -194,7 +339,8 @@ export function removeDocumentFromCollection(
   const document = getDocumentShape(editor, documentId);
   if (!document) return;
 
-  const nextDocumentIds = collection.props.documentIds.filter((id) => id !== documentId);
+  const documentIdValue = documentId as unknown as string;
+  const nextDocumentIds = collection.props.documentIds.filter((id) => id !== documentIdValue);
   editor.updateShapes([
     {
       id: collectionId,
@@ -213,37 +359,33 @@ export function removeDocumentFromCollection(
 
 export function updateCollectionSize(
   editor: Editor,
-  collectionId: string,
-  padding = 40
+  collectionId: TLShapeId,
+  padding = COLLECTION_PADDING
 ) {
   const collection = getCollectionShape(editor, collectionId);
   if (!collection) return;
 
   const documents = collection.props.documentIds
-    .map((id) => getDocumentShape(editor, id))
+    .map((id) => getDocumentShape(editor, id as TLShapeId))
     .filter((shape): shape is DocumentShape => Boolean(shape));
 
-  if (documents.length === 0) return;
-
-  const bounds = calculateCollectionBounds(documents, padding, editor);
-  const deltaX = bounds.x - collection.x;
-  const deltaY = bounds.y - collection.y;
-
-  const documentUpdates = documents.map((doc) => ({
-    id: doc.id,
-    type: "document" as const,
-    x: doc.x - deltaX,
-    y: doc.y - deltaY,
-  }));
+  const docSize = documents[0]?.props ?? { w: 300, h: 180 };
+  const gridSize = calculateGridCollectionSize(
+    documents.length,
+    docSize.w,
+    docSize.h,
+    GRID_COLUMNS,
+    GRID_GAP,
+    padding
+  );
 
   editor.updateShapes([
     {
       id: collectionId,
       type: "collection",
-      x: bounds.x,
-      y: bounds.y,
-      props: { ...collection.props, w: bounds.w, h: bounds.h },
+      props: { ...collection.props, w: gridSize.w, h: gridSize.h },
     },
-    ...documentUpdates,
   ]);
+
+  repositionDocumentsInGrid(editor, collectionId);
 }

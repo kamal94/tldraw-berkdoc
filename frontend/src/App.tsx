@@ -32,6 +32,7 @@ import { LoadingState, ErrorState, UnauthorizedState } from "./components/ui/loa
 import { boardsApi, type Board } from "./api/boards";
 import { isUnauthorizedError, createUserPreferences } from "./utils/board-utils";
 import { useCollectionAutoSize } from "./hooks/useCollectionAutoSize";
+import { useCollectionDragHandler } from "./hooks/useCollectionDragHandler";
 
 const customShapeUtils = [DocumentShapeUtil, CollectionShapeUtil];
 
@@ -57,6 +58,7 @@ function AuthenticatedTldraw({
 
   const user = useTldrawUser({ userPreferences, setUserPreferences });
   useCollectionAutoSize(editor);
+  useCollectionDragHandler(editor);
 
   return (
     <Tldraw
