@@ -3,6 +3,7 @@ import { useSync } from "@tldraw/sync";
 import type { TLStoreWithStatus, TLAsset, TLUserPreferences } from "tldraw";
 import { defaultShapeUtils, defaultBindingUtils } from "tldraw";
 import { DocumentShapeUtil } from "../shapes/DocumentShape";
+import { CollectionShapeUtil } from "../shapes/CollectionShape";
 import { getAuthToken } from "../api/api-utils";
 
 const WS_URL = import.meta.env.VITE_WS_URL || "ws://localhost:3001";
@@ -56,7 +57,7 @@ export function useBoardSync(
   }, [boardId]);
 
   const shapeUtils = useMemo(
-    () => [DocumentShapeUtil, ...defaultShapeUtils],
+    () => [DocumentShapeUtil, CollectionShapeUtil, ...defaultShapeUtils],
     []
   );
 

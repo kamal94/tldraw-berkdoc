@@ -33,12 +33,22 @@ const documentShapeProps = {
 	summary: T.string.optional(),
 } as const;
 
+const collectionShapeProps = {
+	w: T.number,
+	h: T.number,
+	label: T.string,
+	documentIds: T.arrayOf(T.string),
+} as const;
+
 export const schema = createTLSchema({
 	shapes: {
 		...defaultShapeSchemas,
 
 		document: {
 			props: documentShapeProps,
+		},
+		collection: {
+			props: collectionShapeProps,
 		},
 	},
 	bindings: defaultBindingSchemas,

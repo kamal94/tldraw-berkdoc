@@ -1,9 +1,17 @@
 // ALWAYS KEEP THIS FILE AS SIMPLE AS POSSIBLE. DO NOT FILL IT WITH IMPLEMENTATION DETAILS.
 import { useMemo, useState, useEffect } from "react";
 import { createBrowserRouter, Navigate, RouterProvider, useParams, useNavigate } from "react-router";
-import { Tldraw, type TLComponents, useTldrawUser, type TLUserPreferences, type TLStoreWithStatus } from "tldraw";
+import {
+  Tldraw,
+  type TLComponents,
+  type Editor,
+  useTldrawUser,
+  type TLUserPreferences,
+  type TLStoreWithStatus,
+} from "tldraw";
 import "tldraw/tldraw.css";
 import { DocumentShapeUtil } from "./shapes/DocumentShape";
+import { CollectionShapeUtil } from "./shapes/CollectionShape";
 import { AnimationProvider } from "./contexts/AnimationProvider";
 import { AuthProvider } from "./contexts/AuthProvider";
 import { WebSocketProvider } from "./contexts/WebSocketProvider";
@@ -18,12 +26,14 @@ import { OnboardingWizard } from "./components/onboarding/OnboardingWizard";
 import { useBoardSync } from "./hooks/useBoardSync";
 import { BoardsPage } from "./components/BoardsPage";
 import { BoardMainMenu } from "./components/BoardActionsMenu";
+import { BoardContextMenu } from "./components/BoardContextMenu";
 import { AuthModal } from "./components/AuthModal";
 import { LoadingState, ErrorState, UnauthorizedState } from "./components/ui/loading-state";
 import { boardsApi, type Board } from "./api/boards";
 import { isUnauthorizedError, createUserPreferences } from "./utils/board-utils";
+import { useCollectionAutoSize } from "./hooks/useCollectionAutoSize";
 
-const customShapeUtils = [DocumentShapeUtil];
+const customShapeUtils = [DocumentShapeUtil, CollectionShapeUtil];
 
 /**
  * Component for authenticated users - renders tldraw with sync store
@@ -43,8 +53,10 @@ function AuthenticatedTldraw({
   const [userPreferences, setUserPreferences] = useState<TLUserPreferences>(() =>
     createUserPreferences(userId, userName)
   );
+  const [editor, setEditor] = useState<Editor | null>(null);
 
   const user = useTldrawUser({ userPreferences, setUserPreferences });
+  useCollectionAutoSize(editor);
 
   return (
     <Tldraw
@@ -52,6 +64,7 @@ function AuthenticatedTldraw({
       shapeUtils={customShapeUtils}
       components={components}
       user={user}
+      onMount={(mountedEditor) => setEditor(mountedEditor)}
       options={{
         maxShapesPerPage: 100 * 1000,
       }}
@@ -156,6 +169,7 @@ function BoardRoute() {
     () => ({
       SharePanel: () => <SharePanel onViewDuplicates={() => setShowDuplicates(true)} />,
       MainMenu: BoardMainMenu,
+      ContextMenu: BoardContextMenu,
     }),
     []
   );
