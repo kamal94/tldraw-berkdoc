@@ -17,6 +17,10 @@ export const GRID_COLUMNS = 3;
 export const GRID_GAP = 16;
 export const COLLECTION_PADDING = 40;
 
+function getEffectiveColumns(documentCount: number, columns = GRID_COLUMNS) {
+  return Math.min(columns, Math.max(1, documentCount));
+}
+
 function isDocumentShape(shape: unknown): shape is DocumentShape {
   return Boolean(shape && (shape as { type?: string }).type === "document");
 }
@@ -120,8 +124,9 @@ export function calculateGridCollectionSize(
     return { w: DEFAULT_COLLECTION_SIZE.w, h: DEFAULT_COLLECTION_SIZE.h };
   }
 
-  const rows = Math.max(1, Math.ceil(documentCount / columns));
-  const w = padding * 2 + columns * docWidth + (columns - 1) * gap;
+  const effectiveColumns = getEffectiveColumns(documentCount, columns);
+  const rows = Math.max(1, Math.ceil(documentCount / effectiveColumns));
+  const w = padding * 2 + effectiveColumns * docWidth + (effectiveColumns - 1) * gap;
   const h = padding * 2 + rows * docHeight + (rows - 1) * gap;
 
   return { w, h };
@@ -137,14 +142,15 @@ export function getDropIndexFromPosition(
   gap = GRID_GAP,
   padding = COLLECTION_PADDING
 ) {
+  const effectiveColumns = getEffectiveColumns(Math.max(1, totalDocs + 1), columns);
   const cellWidth = docWidth + gap;
   const cellHeight = docHeight + gap;
   const localX = Math.max(0, x - padding);
   const localY = Math.max(0, y - padding);
 
-  const column = Math.min(columns - 1, Math.floor(localX / cellWidth));
+  const column = Math.min(effectiveColumns - 1, Math.floor(localX / cellWidth));
   const row = Math.max(0, Math.floor(localY / cellHeight));
-  const index = row * columns + column;
+  const index = row * effectiveColumns + column;
 
   return Math.min(Math.max(index, 0), totalDocs);
 }
@@ -166,6 +172,7 @@ export function repositionDocumentsInGrid(
   if (documents.length === 0) return;
 
   const { w: docWidth, h: docHeight } = documents[0].props;
+  const effectiveColumns = getEffectiveColumns(documents.length, columns);
 
   const updates = documents
     .map((doc, index) => {
@@ -173,7 +180,7 @@ export function repositionDocumentsInGrid(
         index,
         docWidth,
         docHeight,
-        columns,
+        effectiveColumns,
         gap,
         padding
       );
@@ -249,6 +256,7 @@ export function createCollection(editor: Editor, options: CreateCollectionOption
     },
   });
 
+  const effectiveColumns = getEffectiveColumns(documents.length, GRID_COLUMNS);
   documents.forEach((doc, index) => {
     if (typeof editor.reparentShapes === "function") {
       editor.reparentShapes([doc.id], collectionId as TLParentId);
@@ -258,7 +266,12 @@ export function createCollection(editor: Editor, options: CreateCollectionOption
       ]);
     }
 
-    const position = calculateGridPosition(index, docSize.w, docSize.h);
+    const position = calculateGridPosition(
+      index,
+      docSize.w,
+      docSize.h,
+      effectiveColumns
+    );
     editor.updateShapes([
       {
         id: doc.id,
@@ -311,10 +324,12 @@ export function addDocumentToCollection(
   }
 
   const docSize = document.props;
+  const effectiveColumns = getEffectiveColumns(nextDocumentIds.length, GRID_COLUMNS);
   const position = calculateGridPosition(
     nextDocumentIds.indexOf(documentIdValue),
     docSize.w,
-    docSize.h
+    docSize.h,
+    effectiveColumns
   );
 
   editor.updateShapes([

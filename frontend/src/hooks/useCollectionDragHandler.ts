@@ -33,6 +33,10 @@ function isPointInCollectionBounds(
   );
 }
 
+function getEffectiveColumns(documentCount: number, maxColumns = 3) {
+  return Math.min(maxColumns, Math.max(1, documentCount));
+}
+
 function findCollectionAtPoint(
   editor: Editor,
   point: Point,
@@ -60,6 +64,7 @@ export type CollectionDragState = {
   dropIndex: number | null;
   docWidth: number;
   docHeight: number;
+  docCount: number;
 };
 
 const defaultDragState: CollectionDragState = {
@@ -69,6 +74,7 @@ const defaultDragState: CollectionDragState = {
   dropIndex: null,
   docWidth: 300,
   docHeight: 180,
+  docCount: 0,
 };
 
 const dragStateStore = {
@@ -211,7 +217,13 @@ export function useCollectionDragHandler(editor: Editor | null) {
           const reordered = currentIds.filter((id) => id !== docShape.id);
           reordered.splice(dropIndex, 0, docShape.id);
 
-          const position = calculateGridPosition(dropIndex, docSize.w, docSize.h);
+          const effectiveColumns = getEffectiveColumns(reordered.length);
+          const position = calculateGridPosition(
+            dropIndex,
+            docSize.w,
+            docSize.h,
+            effectiveColumns
+          );
           editor.updateShapes([
             {
               id: sourceCollection.id,
@@ -262,7 +274,13 @@ export function useCollectionDragHandler(editor: Editor | null) {
           }
 
           editor.reparentShapes([docShape.id], targetCollection.id as TLParentId);
-          const position = calculateGridPosition(targetDropIndex, docSize.w, docSize.h);
+          const effectiveColumns = getEffectiveColumns(targetIds.length);
+          const position = calculateGridPosition(
+            targetDropIndex,
+            docSize.w,
+            docSize.h,
+            effectiveColumns
+          );
           editor.updateShapes([
             ...updates,
             {
@@ -312,9 +330,15 @@ export function useCollectionDragHandler(editor: Editor | null) {
             dropIndex: null,
             docWidth: docShape.props.w,
             docHeight: docShape.props.h,
+            docCount: 0,
           });
           return;
         }
+
+        const docCount =
+          sourceCollection?.id === targetCollection.id
+            ? targetCollection.props.documentIds.filter((id) => id !== docShape.id).length
+            : targetCollection.props.documentIds.length;
 
         const dropIndex = getCollectionDropIndex(
           targetCollection,
@@ -330,6 +354,7 @@ export function useCollectionDragHandler(editor: Editor | null) {
           dropIndex,
           docWidth: docShape.props.w,
           docHeight: docShape.props.h,
+          docCount,
         });
       }
     });

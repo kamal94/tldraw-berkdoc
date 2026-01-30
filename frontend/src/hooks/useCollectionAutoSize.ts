@@ -19,7 +19,9 @@ export function useCollectionAutoSize(editor: Editor | null) {
       if (
         isUpdating ||
         collectionProcessingState.isProcessing ||
-        getCollectionDragState().isDragging
+        getCollectionDragState().isDragging ||
+        editor.inputs?.isDragging ||
+        editor.inputs?.pointerIsDown
       ) {
         return;
       }

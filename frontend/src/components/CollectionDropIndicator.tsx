@@ -25,11 +25,16 @@ export function CollectionDropIndicator({ collectionId }: { collectionId: string
     return null;
   }
 
+  const effectiveColumns = Math.min(
+    GRID_COLUMNS,
+    Math.max(1, dragState.docCount || 1)
+  );
+
   const { x, y } = calculateGridPosition(
     dragState.dropIndex,
     dragState.docWidth,
     dragState.docHeight,
-    GRID_COLUMNS,
+    effectiveColumns,
     GRID_GAP,
     COLLECTION_PADDING
   );
