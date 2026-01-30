@@ -5,6 +5,7 @@ import type { CollectionShape } from "../shapes/CollectionShape";
 import type { CollectionShapeProps } from "@shared/document-shape.types";
 import {
   calculateGridPosition,
+  calculateGridCollectionSize,
   getDropIndexFromPosition,
 } from "../utils/collection-utils";
 
@@ -197,6 +198,13 @@ export function useCollectionDragHandler(editor: Editor | null) {
             (id) => id !== docShape.id
           );
 
+          // Calculate new size for source collection after removing the document
+          const newSize = calculateGridCollectionSize(
+            newDocumentIds.length,
+            docSize.w,
+            docSize.h
+          );
+
           editor.reparentShapes([docShape.id], pageId as TLParentId);
           editor.updateShapes([
             {
@@ -211,6 +219,8 @@ export function useCollectionDragHandler(editor: Editor | null) {
               props: {
                 ...sourceCollection.props,
                 documentIds: newDocumentIds,
+                w: newSize.w,
+                h: newSize.h,
               } as CollectionShapeProps,
             },
           ]);
@@ -260,6 +270,13 @@ export function useCollectionDragHandler(editor: Editor | null) {
           );
           targetIds.splice(targetDropIndex, 0, docShape.id);
 
+          // Calculate new size for target collection after adding the document
+          const targetSize = calculateGridCollectionSize(
+            targetIds.length,
+            docSize.w,
+            docSize.h
+          );
+
           const updates = [
             {
               id: targetCollection.id,
@@ -267,6 +284,8 @@ export function useCollectionDragHandler(editor: Editor | null) {
               props: {
                 ...targetCollection.props,
                 documentIds: targetIds,
+                w: targetSize.w,
+                h: targetSize.h,
               } as CollectionShapeProps,
             },
           ];
@@ -275,12 +294,20 @@ export function useCollectionDragHandler(editor: Editor | null) {
             const sourceIds = sourceCollection.props.documentIds.filter(
               (id) => id !== docShape.id
             );
+            // Calculate new size for source collection after removing the document
+            const sourceSize = calculateGridCollectionSize(
+              sourceIds.length,
+              docSize.w,
+              docSize.h
+            );
             updates.push({
               id: sourceCollection.id,
               type: "collection",
               props: {
                 ...sourceCollection.props,
                 documentIds: sourceIds,
+                w: sourceSize.w,
+                h: sourceSize.h,
               } as CollectionShapeProps,
             });
           }
@@ -305,10 +332,12 @@ export function useCollectionDragHandler(editor: Editor | null) {
         }
       } finally {
         clearDragState();
-        setTimeout(() => {
+        // Use requestAnimationFrame instead of setTimeout for faster state reset
+        // Size is now updated directly, so we don't need to wait for auto-size
+        requestAnimationFrame(() => {
           isProcessingRef.current = false;
           collectionProcessingState.isProcessing = false;
-        }, 100);
+        });
       }
     };
 
