@@ -13,20 +13,9 @@ export function useCollectionAutoSize(editor: Editor | null) {
   useEffect(() => {
     if (!editor) return;
 
-    let isUpdating = false;
     const defaultDocSize = { w: 300, h: 180 };
-    const unsubscribe = editor.store.listen(() => {
-      if (
-        isUpdating ||
-        collectionProcessingState.isProcessing ||
-        getCollectionDragState().isDragging ||
-        editor.inputs?.isDragging ||
-        editor.inputs?.pointerIsDown
-      ) {
-        return;
-      }
-      isUpdating = true;
 
+    const runAutoSize = () => {
       const collections = editor
         .getCurrentPageShapes()
         .filter((shape) => shape.type === "collection");
@@ -34,31 +23,61 @@ export function useCollectionAutoSize(editor: Editor | null) {
       collections.forEach((shape) => {
         const collection = editor.getShape(shape.id);
         if (!collection || collection.type !== "collection") return;
+        
+        // Clean up stale/duplicate documentIds - only keep documents that are actually children
+        const validDocumentIds = [...new Set(collection.props.documentIds)].filter((id) => {
+          const doc = editor.getShape(id);
+          return doc && doc.type === "document" && doc.parentId === collection.id;
+        });
 
-        const documentShapes = collection.props.documentIds
+        // Update documentIds if they changed (removed stale/duplicates)
+        const idsChanged = validDocumentIds.length !== collection.props.documentIds.length ||
+          !validDocumentIds.every((id, i) => id === collection.props.documentIds[i]);
+
+        const documentShapes = validDocumentIds
           .map((id) => editor.getShape(id))
           .filter((doc) => doc?.type === "document");
 
         const docSize = documentShapes[0]?.props ?? defaultDocSize;
         const { w, h } = calculateGridCollectionSize(
-          collection.props.documentIds.length,
+          validDocumentIds.length,
           docSize.w,
           docSize.h
         );
 
-        if (collection.props.w !== w || collection.props.h !== h) {
+        const needsSizeUpdate = collection.props.w !== w || collection.props.h !== h;
+        
+        if (idsChanged || needsSizeUpdate) {
           editor.updateShapes([
             {
               id: collection.id,
               type: "collection",
-              props: { ...collection.props, w, h },
+              props: { 
+                ...collection.props, 
+                w, 
+                h,
+                documentIds: validDocumentIds,
+              },
             },
           ]);
         }
 
         repositionDocumentsInGrid(editor, collection.id);
       });
-      isUpdating = false;
+    };
+
+    const unsubscribe = editor.store.listen(() => {
+      // Skip if actively processing or dragging
+      if (
+        collectionProcessingState.isProcessing ||
+        getCollectionDragState().isDragging ||
+        editor.inputs?.isDragging ||
+        editor.inputs?.pointerIsDown
+      ) {
+        return;
+      }
+
+      runAutoSize();
     });
 
     return () => {

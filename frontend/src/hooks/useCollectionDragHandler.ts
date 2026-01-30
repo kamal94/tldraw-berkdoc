@@ -170,8 +170,17 @@ export function useCollectionDragHandler(editor: Editor | null) {
       }
 
       const docSize = { w: docShape.props.w, h: docShape.props.h };
+      
+      // Use tracked sourceCollectionId from drag state (set during pointer_move)
+      // This is more reliable than checking parentId which may have changed
+      const trackedSourceId = dragStateStore.state.sourceCollectionId;
       const parentShape = editor.getShape(docShape.parentId);
-      const sourceCollection = isCollectionShape(parentShape) ? parentShape : null;
+      const parentCollection = isCollectionShape(parentShape) ? parentShape : null;
+      
+      // Prefer the tracked source, fall back to current parent
+      const sourceCollection = trackedSourceId 
+        ? (editor.getShape(trackedSourceId) as CollectionShape | undefined) ?? parentCollection
+        : parentCollection;
       const targetCollection = findCollectionAtPoint(editor, pointer);
 
       if (!sourceCollection && !targetCollection) {
@@ -245,7 +254,10 @@ export function useCollectionDragHandler(editor: Editor | null) {
             getCollectionDropIndex(targetCollection, pointer, docSize) ??
             targetCollection.props.documentIds.length;
 
-          const targetIds = [...targetCollection.props.documentIds];
+          // Remove any existing entry first to prevent duplicates, then add at new position
+          const targetIds = targetCollection.props.documentIds.filter(
+            (id) => id !== docShape.id
+          );
           targetIds.splice(targetDropIndex, 0, docShape.id);
 
           const updates = [
@@ -318,14 +330,24 @@ export function useCollectionDragHandler(editor: Editor | null) {
           return;
         }
 
-        const parentShape = editor.getShape(docShape.parentId);
-        const sourceCollection = isCollectionShape(parentShape) ? parentShape : null;
+        // Only determine source collection ONCE at the start of drag
+        // After that, keep using the tracked value
+        const currentState = dragStateStore.state;
+        let sourceCollectionId = currentState.sourceCollectionId;
+        
+        if (!currentState.isDragging) {
+          // First move of this drag - capture source collection
+          const parentShape = editor.getShape(docShape.parentId);
+          const sourceCollection = isCollectionShape(parentShape) ? parentShape : null;
+          sourceCollectionId = sourceCollection?.id ?? null;
+        }
+
         const targetCollection = findCollectionAtPoint(editor, pointer);
 
         if (!targetCollection) {
           updateDragState({
             isDragging: true,
-            sourceCollectionId: sourceCollection?.id ?? null,
+            sourceCollectionId,
             targetCollectionId: null,
             dropIndex: null,
             docWidth: docShape.props.w,
@@ -336,7 +358,7 @@ export function useCollectionDragHandler(editor: Editor | null) {
         }
 
         const docCount =
-          sourceCollection?.id === targetCollection.id
+          sourceCollectionId === targetCollection.id
             ? targetCollection.props.documentIds.filter((id) => id !== docShape.id).length
             : targetCollection.props.documentIds.length;
 
@@ -344,12 +366,12 @@ export function useCollectionDragHandler(editor: Editor | null) {
           targetCollection,
           pointer,
           { w: docShape.props.w, h: docShape.props.h },
-          sourceCollection?.id === targetCollection.id ? docShape.id : undefined
+          sourceCollectionId === targetCollection.id ? docShape.id : undefined
         );
 
         updateDragState({
           isDragging: true,
-          sourceCollectionId: sourceCollection?.id ?? null,
+          sourceCollectionId,
           targetCollectionId: targetCollection.id,
           dropIndex,
           docWidth: docShape.props.w,

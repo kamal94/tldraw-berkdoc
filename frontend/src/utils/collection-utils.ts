@@ -165,9 +165,11 @@ export function repositionDocumentsInGrid(
   const collection = getCollectionShape(editor, collectionId);
   if (!collection) return;
 
+  // Only include documents that are actually children of this collection
   const documents = collection.props.documentIds
     .map((id) => getDocumentShape(editor, id as TLShapeId))
-    .filter((shape): shape is DocumentShape => Boolean(shape));
+    .filter((shape): shape is DocumentShape => Boolean(shape))
+    .filter((shape) => shape.parentId === collectionId);
 
   if (documents.length === 0) return;
 
