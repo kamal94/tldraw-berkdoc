@@ -11,15 +11,24 @@ export interface Board {
   updatedAt: string;
 }
 
-class BoardsApi {
+export class BoardsApiError extends Error {
+  status: number;
 
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'BoardsApiError';
+    this.status = status;
+  }
+}
+
+class BoardsApi {
   async listBoards(): Promise<Board[]> {
     const response = await fetch(`${API_URL}/boards`, {
       headers: generateAuthHeaders(),
     });
 
     if (!response.ok) {
-      throw new Error('Failed to fetch boards');
+      throw new BoardsApiError('Failed to fetch boards', response.status);
     }
 
     return response.json();
@@ -33,7 +42,7 @@ class BoardsApi {
     });
 
     if (!response.ok) {
-      throw new Error('Failed to create board');
+      throw new BoardsApiError('Failed to create board', response.status);
     }
 
     return response.json();
@@ -45,7 +54,7 @@ class BoardsApi {
     });
 
     if (!response.ok) {
-      throw new Error('Failed to fetch board');
+      throw new BoardsApiError('Failed to fetch board', response.status);
     }
 
     return response.json();
@@ -59,7 +68,7 @@ class BoardsApi {
     });
 
     if (!response.ok) {
-      throw new Error('Failed to update board');
+      throw new BoardsApiError('Failed to update board', response.status);
     }
 
     return response.json();
@@ -72,7 +81,7 @@ class BoardsApi {
     });
 
     if (!response.ok) {
-      throw new Error('Failed to delete board');
+      throw new BoardsApiError('Failed to delete board', response.status);
     }
 
     return response.json();

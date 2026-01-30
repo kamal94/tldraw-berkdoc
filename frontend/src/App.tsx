@@ -1,9 +1,17 @@
 // ALWAYS KEEP THIS FILE AS SIMPLE AS POSSIBLE. DO NOT FILL IT WITH IMPLEMENTATION DETAILS.
 import { useMemo, useState, useEffect } from "react";
 import { createBrowserRouter, Navigate, RouterProvider, useParams, useNavigate } from "react-router";
-import { Tldraw, type TLComponents, useTldrawUser, type TLUserPreferences } from "tldraw";
+import {
+  Tldraw,
+  type TLComponents,
+  type Editor,
+  useTldrawUser,
+  type TLUserPreferences,
+  type TLStoreWithStatus,
+} from "tldraw";
 import "tldraw/tldraw.css";
 import { DocumentShapeUtil } from "./shapes/DocumentShape";
+import { CollectionShapeUtil } from "./shapes/CollectionShape";
 import { AnimationProvider } from "./contexts/AnimationProvider";
 import { AuthProvider } from "./contexts/AuthProvider";
 import { WebSocketProvider } from "./contexts/WebSocketProvider";
@@ -18,80 +26,52 @@ import { OnboardingWizard } from "./components/onboarding/OnboardingWizard";
 import { useBoardSync } from "./hooks/useBoardSync";
 import { BoardsPage } from "./components/BoardsPage";
 import { BoardMainMenu } from "./components/BoardActionsMenu";
+import { BoardContextMenu } from "./components/BoardContextMenu";
 import { AuthModal } from "./components/AuthModal";
-import { Button } from "./components/ui/button";
-import { LoadingState, ErrorState } from "./components/ui/loading-state";
+import { LoadingState, ErrorState, UnauthorizedState } from "./components/ui/loading-state";
+import { boardsApi, type Board } from "./api/boards";
+import { isUnauthorizedError, createUserPreferences } from "./utils/board-utils";
+import { useCollectionAutoSize } from "./hooks/useCollectionAutoSize";
+import { useCollectionDragHandler } from "./hooks/useCollectionDragHandler";
 
-const customShapeUtils = [DocumentShapeUtil];
+const customShapeUtils = [DocumentShapeUtil, CollectionShapeUtil];
 
-// Component for authenticated users - uses sync
+/**
+ * Component for authenticated users - renders tldraw with sync store
+ * Assumes syncStore is already validated and ready (status === "synced-remote")
+ */
 function AuthenticatedTldraw({
-  boardId,
+  syncStore,
   userId,
   userName,
   components,
 }: {
-  boardId: string;
+  syncStore: TLStoreWithStatus;
   userId: string;
   userName: string;
   components: TLComponents;
 }) {
-  // Create user preferences for tldraw presence
-  const [userPreferences, setUserPreferences] = useState<TLUserPreferences>(() => {
-    return {
-      id: userId,
-      name: userName,
-      color: "#1a73e8", // Same blue as app's primary color
-      colorScheme: "light",
-    };
-  });
+  const [userPreferences, setUserPreferences] = useState<TLUserPreferences>(() =>
+    createUserPreferences(userId, userName)
+  );
+  const [editor, setEditor] = useState<Editor | null>(null);
 
-  // Hooks must be called before any early returns
-  // Pass userInfo to sync (subset of userPreferences as per tutorial)
-  const syncStore = useBoardSync(boardId, userPreferences);
-
-  // Create TLUser object using useTldrawUser hook
   const user = useTldrawUser({ userPreferences, setUserPreferences });
+  useCollectionAutoSize(editor);
+  useCollectionDragHandler(editor);
 
-  // Check if token exists - show error if missing
-  const token = localStorage.getItem("auth_token");
-  if (!token) {
-    return <ErrorState title="Authentication Error" message="Please sign in again" />;
-  }
-
-  // If sync store is loading, show loading state
-  if (syncStore?.status === "loading") {
-    return <LoadingState message="Connecting..." />;
-  }
-
-  // If sync store has error, show error state
-  if (syncStore?.status === "error") {
-    return (
-      <ErrorState
-        title="Connection Error"
-        message={syncStore.error.message}
-        onRetry={() => window.location.reload()}
-      />
-    );
-  }
-
-  // Render tldraw with sync store when synced
-  if (syncStore && syncStore.status === "synced-remote") {
-    return (
-      <Tldraw
-        store={syncStore}
-        shapeUtils={customShapeUtils}
-        components={components}
-        user={user}
-        options={{
-          maxShapesPerPage: 100 * 1000,
-        }}
-      />
-    );
-  }
-
-  // Fallback to loading state
-  return <LoadingState message="Connecting..." />;
+  return (
+    <Tldraw
+      store={syncStore}
+      shapeUtils={customShapeUtils}
+      components={components}
+      user={user}
+      onMount={(mountedEditor) => setEditor(mountedEditor)}
+      options={{
+        maxShapesPerPage: 100 * 1000,
+      }}
+    />
+  );
 }
 
 function AuthCallbackRoute() {
@@ -112,38 +92,126 @@ function AuthCallbackRoute() {
   return <LoadingState message="Completing sign in..." />;
 }
 
+/**
+ * Hook to load board data
+ */
+function useBoardLoader(boardId: string | undefined) {
+  const [board, setBoard] = useState<Board | null>(null);
+  const [boardError, setBoardError] = useState<unknown>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!boardId) return;
+
+    let isActive = true;
+
+    const loadBoard = async () => {
+      setIsLoading(true);
+      setBoardError(null);
+      setBoard(null);
+
+      try {
+        const data = await boardsApi.getBoard(boardId);
+        if (!isActive) return;
+        setBoard(data);
+      } catch (error) {
+        if (!isActive) return;
+        setBoardError(error);
+        setBoard(null);
+      } finally {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadBoard();
+    return () => {
+      isActive = false;
+    };
+  }, [boardId]);
+
+  return { board, boardError, isLoading };
+}
+
+/**
+ * Render unauthorized state with optional sign-in action
+ */
+function UnauthorizedView({ isAuthenticated }: { isAuthenticated: boolean }) {
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
+  const handleSignIn = () => {
+    setIsAuthModalOpen(true);
+  };
+
+  return (
+    <>
+      <UnauthorizedState
+        title={isAuthenticated ? "Unauthorized access" : "Sign in required"}
+        message={
+          isAuthenticated
+            ? "You don't have access to this board."
+            : "Please sign in to access this board."
+        }
+        actionLabel={isAuthenticated ? undefined : "Sign in"}
+        onAction={isAuthenticated ? undefined : handleSignIn}
+      />
+      <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
+    </>
+  );
+}
+
 function BoardRoute() {
   const { boardId } = useParams();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const [showDuplicates, setShowDuplicates] = useState(false);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const { board, boardError, isLoading: isBoardLoading } = useBoardLoader(boardId);
 
   const components: TLComponents = useMemo(
     () => ({
       SharePanel: () => <SharePanel onViewDuplicates={() => setShowDuplicates(true)} />,
       MainMenu: BoardMainMenu,
+      ContextMenu: BoardContextMenu,
     }),
-    [setShowDuplicates]
+    []
   );
 
   if (!boardId) {
     return <Navigate to="/" replace />;
   }
 
-  if (!isAuthenticated || !user) {
+  if (isBoardLoading || isAuthLoading) {
+    return <LoadingState message="Loading board..." />;
+  }
+
+  if (boardError && isUnauthorizedError(boardError)) {
+    return <UnauthorizedView isAuthenticated={isAuthenticated} />;
+  }
+
+  if (boardError) {
+    const errorMessage =
+      boardError instanceof Error ? boardError.message : "Please try again";
     return (
-      <>
-        <div className="fixed inset-0 flex items-center justify-center bg-slate-50">
-          <div className="text-center">
-            <div className="text-lg font-semibold text-slate-900">Sign in to access this board</div>
-            <Button className="mt-4" onClick={() => setIsAuthModalOpen(true)}>
-              Sign in
-            </Button>
-          </div>
-        </div>
-        <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
-      </>
+      <ErrorState
+        title="Unable to load board"
+        message={errorMessage}
+        onRetry={() => window.location.reload()}
+      />
     );
+  }
+
+  if (!board) {
+    return (
+      <ErrorState
+        title="Unable to load board"
+        message="Board data is unavailable. Please try again."
+        onRetry={() => window.location.reload()}
+      />
+    );
+  }
+
+  if (!isAuthenticated || !user) {
+    return <UnauthorizedView isAuthenticated={false} />;
   }
 
   if (showDuplicates) {
@@ -155,9 +223,55 @@ function BoardRoute() {
   }
 
   return (
+    <BoardWithSync boardId={boardId} user={user} components={components} />
+  );
+}
+
+/**
+ * Component that handles sync initialization - only rendered when we have board and user
+ */
+function BoardWithSync({
+  boardId,
+  user,
+  components,
+}: {
+  boardId: string;
+  user: { id: string; name: string };
+  components: TLComponents;
+}) {
+  const userPreferences = useMemo(
+    () => createUserPreferences(user.id, user.name),
+    [user.id, user.name]
+  );
+
+  const syncStore = useBoardSync(boardId, userPreferences);
+
+  if (!syncStore) {
+    return <LoadingState message="Connecting..." />;
+  }
+
+  if (syncStore.status === "loading") {
+    return <LoadingState message="Loading board..." />;
+  }
+
+  if (syncStore.status === "error") {
+    return (
+      <ErrorState
+        title="Connection Error"
+        message={syncStore.error.message}
+        onRetry={() => window.location.reload()}
+      />
+    );
+  }
+
+  if (syncStore.status !== "synced-remote") {
+    return <LoadingState message="Loading board..." />;
+  }
+
+  return (
     <div className="fixed inset-0">
       <AuthenticatedTldraw
-        boardId={boardId}
+        syncStore={syncStore}
         userId={user.id}
         userName={user.name}
         components={components}

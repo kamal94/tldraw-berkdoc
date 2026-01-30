@@ -31,3 +31,11 @@ export interface DocumentShapeProps {
   tags: string[];
   summary?: string;
 }
+
+// Collection shape properties
+export interface CollectionShapeProps {
+  w: number;
+  h: number;
+  label: string;
+  documentIds: string[];
+}
