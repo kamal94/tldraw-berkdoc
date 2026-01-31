@@ -14,8 +14,12 @@ function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T 
   }) as T;
 }
 
-// Define validators for DocumentShapeProps
-const documentShapeProps = {
+// ============================================================================
+// Shape Validators
+// These should match the types defined in @shared/document-shape.types.ts
+// ============================================================================
+
+const documentShapePropsValidators = {
 	w: T.number,
 	h: T.number,
 	title: T.string,
@@ -24,20 +28,24 @@ const documentShapeProps = {
 	contributors: T.arrayOf(
 		T.object({
 			name: T.string,
+			email: T.string.optional().nullable(),
 			avatarUrl: T.string.optional(),
 			color: T.string,
-      email: T.string.optional().nullable(),
 		})
 	),
 	tags: T.arrayOf(T.string),
 	summary: T.string.optional(),
 } as const;
 
-const collectionShapeProps = {
+const collectionShapePropsValidators = {
 	w: T.number,
 	h: T.number,
 	label: T.string,
 	documentIds: T.arrayOf(T.string),
+	// Style properties - optional on backend for backward compatibility with existing shapes
+	// Frontend will apply defaults when rendering shapes without these properties
+	color: T.string.optional(),  // TLDefaultColorStyle values (light-blue, red, etc.)
+	dash: T.string.optional(),   // TLDefaultDashStyle values (solid, dashed, dotted, draw)
 } as const;
 
 export const schema = createTLSchema({
@@ -45,10 +53,10 @@ export const schema = createTLSchema({
 		...defaultShapeSchemas,
 
 		document: {
-			props: documentShapeProps,
+			props: documentShapePropsValidators,
 		},
 		collection: {
-			props: collectionShapeProps,
+			props: collectionShapePropsValidators,
 		},
 	},
 	bindings: defaultBindingSchemas,
@@ -109,7 +117,10 @@ export class BoardsRoomManager {
       initialSnapshot,
       log: {
         warn: (...args: unknown[]) => this.logger.warn(args.join(' ')),
-        error: (...args: unknown[]) => this.logger.error(args.join(' ')),
+        error: (...args: unknown[]) => {
+          this.logger.error(args.join(' '), JSON.stringify(args, null, 2));
+          return;
+        },
       },
       onDataChange: () => {
         // Persist on data change (debounced)

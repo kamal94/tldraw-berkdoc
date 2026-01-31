@@ -32,10 +32,34 @@ export interface DocumentShapeProps {
   summary?: string;
 }
 
+// tldraw default color style values
+export type TLDefaultColorStyle = 
+  | "black" 
+  | "blue" 
+  | "green" 
+  | "grey" 
+  | "light-blue" 
+  | "light-green" 
+  | "light-red" 
+  | "light-violet" 
+  | "orange" 
+  | "red" 
+  | "violet" 
+  | "white" 
+  | "yellow";
+
+// tldraw default dash style values
+export type TLDefaultDashStyle = "solid" | "dashed" | "dotted" | "draw";
+
 // Collection shape properties
+// Note: color and dash are optional at runtime for backward compatibility
+// with existing shapes, but the StylePanel requires them to be defined
+// in the ShapeUtil's static props using DefaultColorStyle/DefaultDashStyle
 export interface CollectionShapeProps {
   w: number;
   h: number;
   label: string;
   documentIds: string[];
+  color: TLDefaultColorStyle;
+  dash: TLDefaultDashStyle;
 }

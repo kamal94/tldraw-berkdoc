@@ -1,21 +1,65 @@
-import { HTMLContainer, Rectangle2d, ShapeUtil } from "tldraw";
+import {
+  HTMLContainer,
+  BaseBoxShapeUtil,
+  T,
+  DefaultColorStyle,
+  DefaultDashStyle,
+  useDefaultColorTheme,
+} from "tldraw";
 import type { TLBaseShape } from "@tldraw/tlschema";
 import type { CollectionShapeProps } from "@shared/document-shape.types";
+import { 
+  COLLECTION_SHAPE_DEFAULTS,
+  COLLECTION_COLOR_DEFAULT,
+  COLLECTION_DASH_DEFAULT,
+} from "@shared/shape-schemas";
 import { CollectionBackground } from "./CollectionBackground";
 import { CollectionDropIndicator } from "../components/CollectionDropIndicator";
 
 export type CollectionShape = TLBaseShape<"collection", CollectionShapeProps>;
 
-export class CollectionShapeUtil extends ShapeUtil<CollectionShape> {
+// Component that uses the useDefaultColorTheme hook
+export function CollectionShapeComponent({ shape }: { shape: CollectionShape }) {
+  const theme = useDefaultColorTheme();
+
+  // Use defaults if color/dash are undefined (for existing shapes)
+  const color = shape.props.color ?? COLLECTION_COLOR_DEFAULT;
+  const dash = shape.props.dash ?? COLLECTION_DASH_DEFAULT;
+
+  return (
+    <HTMLContainer className="pointer-events-none">
+      <div
+        className="relative"
+        style={{ width: shape.props.w, height: shape.props.h }}
+      >
+        <CollectionBackground
+          width={shape.props.w}
+          height={shape.props.h}
+          color={color}
+          dash={dash}
+          theme={theme}
+        />
+        <CollectionDropIndicator collectionId={shape.id} />
+      </div>
+    </HTMLContainer>
+  );
+}
+
+export class CollectionShapeUtil extends BaseBoxShapeUtil<CollectionShape> {
   static override type = "collection" as const;
 
+  // Static props with style validators - enables StylePanel integration
+  static override props = {
+    w: T.number,
+    h: T.number,
+    label: T.string,
+    documentIds: T.arrayOf(T.string),
+    color: DefaultColorStyle,
+    dash: DefaultDashStyle,
+  };
+
   getDefaultProps(): CollectionShapeProps {
-    return {
-      w: 600,
-      h: 400,
-      label: "New Collection",
-      documentIds: [],
-    };
+    return { ...COLLECTION_SHAPE_DEFAULTS };
   }
 
   override canEdit() {
@@ -30,25 +74,9 @@ export class CollectionShapeUtil extends ShapeUtil<CollectionShape> {
     return true;
   }
 
-  override getGeometry(shape: CollectionShape) {
-    return new Rectangle2d({
-      width: shape.props.w,
-      height: shape.props.h,
-      isFilled: true,
-    });
-  }
-
   component(shape: CollectionShape) {
     return (
-      <HTMLContainer className="pointer-events-none">
-        <div
-          className="relative"
-          style={{ width: shape.props.w, height: shape.props.h }}
-        >
-          <CollectionBackground width={shape.props.w} height={shape.props.h} />
-          <CollectionDropIndicator collectionId={shape.id} />
-        </div>
-      </HTMLContainer>
+      <CollectionShapeComponent shape={shape} />
     );
   }
 

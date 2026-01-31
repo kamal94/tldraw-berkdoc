@@ -3,6 +3,7 @@ import { createShapeId } from "tldraw";
 import { toRichText, type TLParentId, type TLShapeId } from "@tldraw/tlschema";
 import type { DocumentShape } from "../shapes/DocumentShape";
 import type { CollectionShape } from "../shapes/CollectionShape";
+import { COLLECTION_SHAPE_DEFAULTS } from "@shared/shape-schemas";
 
 type CollectionBounds = { x: number; y: number; w: number; h: number };
 
@@ -12,7 +13,10 @@ export type CreateCollectionOptions = {
   padding?: number;
 };
 
-const DEFAULT_COLLECTION_SIZE = { w: 600, h: 400 };
+const DEFAULT_COLLECTION_SIZE = { 
+  w: COLLECTION_SHAPE_DEFAULTS.w, 
+  h: COLLECTION_SHAPE_DEFAULTS.h 
+};
 export const GRID_COLUMNS = 3;
 export const GRID_GAP = 16;
 export const COLLECTION_PADDING = 40;
@@ -236,6 +240,8 @@ export function createCollection(editor: Editor, options: CreateCollectionOption
       h: gridSize.h,
       label,
       documentIds: documents.map((doc) => doc.id) as unknown as string[],
+      color: COLLECTION_SHAPE_DEFAULTS.color,
+      dash: COLLECTION_SHAPE_DEFAULTS.dash,
     },
   });
 
