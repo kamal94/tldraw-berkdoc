@@ -21,7 +21,7 @@ export const GRID_COLUMNS = 3;
 export const GRID_GAP = 16;
 export const COLLECTION_PADDING = 40;
 
-function getEffectiveColumns(documentCount: number, columns = GRID_COLUMNS) {
+export function getEffectiveColumns(documentCount: number, columns = GRID_COLUMNS) {
   return Math.min(columns, Math.max(1, documentCount));
 }
 
@@ -146,7 +146,7 @@ export function getDropIndexFromPosition(
   gap = GRID_GAP,
   padding = COLLECTION_PADDING
 ) {
-  const effectiveColumns = getEffectiveColumns(Math.max(1, totalDocs + 1), columns);
+  const effectiveColumns = getEffectiveColumns(Math.max(1, totalDocs), columns);
   const cellWidth = docWidth + gap;
   const cellHeight = docHeight + gap;
   const localX = Math.max(0, x - padding);

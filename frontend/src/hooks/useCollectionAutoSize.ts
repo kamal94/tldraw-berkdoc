@@ -66,9 +66,10 @@ export function useCollectionAutoSize(editor: Editor | null) {
       });
     };
 
+    let isUpdating = false;
     const unsubscribe = editor.store.listen(() => {
-      // Skip if actively processing or dragging
       if (
+        isUpdating ||
         collectionProcessingState.isProcessing ||
         getCollectionDragState().isDragging ||
         editor.inputs?.isDragging ||
@@ -77,7 +78,12 @@ export function useCollectionAutoSize(editor: Editor | null) {
         return;
       }
 
-      runAutoSize();
+      isUpdating = true;
+      try {
+        runAutoSize();
+      } finally {
+        isUpdating = false;
+      }
     });
 
     return () => {

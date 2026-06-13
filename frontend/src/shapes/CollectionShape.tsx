@@ -8,23 +8,14 @@ import {
 } from "tldraw";
 import type { TLBaseShape } from "@tldraw/tlschema";
 import type { CollectionShapeProps } from "@shared/document-shape.types";
-import { 
-  COLLECTION_SHAPE_DEFAULTS,
-  COLLECTION_COLOR_DEFAULT,
-  COLLECTION_DASH_DEFAULT,
-} from "@shared/shape-schemas";
+import { COLLECTION_SHAPE_DEFAULTS } from "@shared/shape-schemas";
 import { CollectionBackground } from "./CollectionBackground";
 import { CollectionDropIndicator } from "../components/CollectionDropIndicator";
 
 export type CollectionShape = TLBaseShape<"collection", CollectionShapeProps>;
 
-// Component that uses the useDefaultColorTheme hook
 export function CollectionShapeComponent({ shape }: { shape: CollectionShape }) {
   const theme = useDefaultColorTheme();
-
-  // Use defaults if color/dash are undefined (for existing shapes)
-  const color = shape.props.color ?? COLLECTION_COLOR_DEFAULT;
-  const dash = shape.props.dash ?? COLLECTION_DASH_DEFAULT;
 
   return (
     <HTMLContainer className="pointer-events-none">
@@ -35,8 +26,8 @@ export function CollectionShapeComponent({ shape }: { shape: CollectionShape }) 
         <CollectionBackground
           width={shape.props.w}
           height={shape.props.h}
-          color={color}
-          dash={dash}
+          color={shape.props.color}
+          dash={shape.props.dash}
           theme={theme}
         />
         <CollectionDropIndicator collectionId={shape.id} />

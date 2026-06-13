@@ -14,11 +14,6 @@ function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T 
   }) as T;
 }
 
-// ============================================================================
-// Shape Validators
-// These should match the types defined in @shared/document-shape.types.ts
-// ============================================================================
-
 const documentShapePropsValidators = {
 	w: T.number,
 	h: T.number,
@@ -42,10 +37,8 @@ const collectionShapePropsValidators = {
 	h: T.number,
 	label: T.string,
 	documentIds: T.arrayOf(T.string),
-	// Style properties - optional on backend for backward compatibility with existing shapes
-	// Frontend will apply defaults when rendering shapes without these properties
-	color: T.string.optional(),  // TLDefaultColorStyle values (light-blue, red, etc.)
-	dash: T.string.optional(),   // TLDefaultDashStyle values (solid, dashed, dotted, draw)
+	color: T.string,
+	dash: T.string,
 } as const;
 
 export const schema = createTLSchema({
@@ -105,7 +98,6 @@ export class BoardsRoomManager {
       if (room && !room.isClosed()) {
         const snapshot = room.getCurrentSnapshot();
         this.databaseService.updateBoardSnapshot(boardId, JSON.stringify(snapshot));
-        this.logger.debug(`Persisted snapshot for board ${boardId}`);
       }
     }, 1000);
 
@@ -117,10 +109,7 @@ export class BoardsRoomManager {
       initialSnapshot,
       log: {
         warn: (...args: unknown[]) => this.logger.warn(args.join(' ')),
-        error: (...args: unknown[]) => {
-          this.logger.error(args.join(' '), JSON.stringify(args, null, 2));
-          return;
-        },
+        error: (...args: unknown[]) => this.logger.error(args.join(' ')),
       },
       onDataChange: () => {
         // Persist on data change (debounced)

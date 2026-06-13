@@ -25,10 +25,7 @@ export function CollectionDropIndicator({ collectionId }: { collectionId: string
     return null;
   }
 
-  const effectiveColumns = Math.min(
-    GRID_COLUMNS,
-    Math.max(1, dragState.docCount || 1)
-  );
+  const effectiveColumns = Math.min(GRID_COLUMNS, Math.max(1, dragState.docCount));
 
   const { x, y } = calculateGridPosition(
     dragState.dropIndex,

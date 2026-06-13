@@ -7,6 +7,7 @@ import {
   calculateGridPosition,
   calculateGridCollectionSize,
   getDropIndexFromPosition,
+  getEffectiveColumns,
 } from "../utils/collection-utils";
 
 type Point = { x: number; y: number };
@@ -32,10 +33,6 @@ function isPointInCollectionBounds(
     point.y >= bounds.minY &&
     point.y <= bounds.maxY
   );
-}
-
-function getEffectiveColumns(documentCount: number, maxColumns = 3) {
-  return Math.min(maxColumns, Math.max(1, documentCount));
 }
 
 function findCollectionAtPoint(
