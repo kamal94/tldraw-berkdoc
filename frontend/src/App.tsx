@@ -95,7 +95,7 @@ function AuthCallbackRoute() {
 /**
  * Hook to load board data
  */
-function useBoardLoader(boardId: string | undefined) {
+function useBoardLoader(boardId: string | undefined, userId: string | undefined) {
   const [board, setBoard] = useState<Board | null>(null);
   const [boardError, setBoardError] = useState<unknown>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -129,7 +129,7 @@ function useBoardLoader(boardId: string | undefined) {
     return () => {
       isActive = false;
     };
-  }, [boardId]);
+  }, [boardId, userId]);
 
   return { board, boardError, isLoading };
 }
@@ -165,7 +165,7 @@ function BoardRoute() {
   const { boardId } = useParams();
   const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const [showDuplicates, setShowDuplicates] = useState(false);
-  const { board, boardError, isLoading: isBoardLoading } = useBoardLoader(boardId);
+  const { board, boardError, isLoading: isBoardLoading } = useBoardLoader(boardId, user?.id);
 
   const components: TLComponents = useMemo(
     () => ({

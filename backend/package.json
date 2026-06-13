@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "start": "bun run src/main.ts",
-    "start:dev": "bun --watch run src/main.ts",
+    "dev": "bun --watch run src/main.ts",
     "build": "nest build",
     "lint": "bun x eslint src --ext .ts",
     "manage-data": "bun run scripts/manage-data.ts",

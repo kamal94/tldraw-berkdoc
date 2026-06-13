@@ -237,12 +237,10 @@ export function useCollectionDragHandler(editor: Editor | null) {
           reordered.splice(dropIndex, 0, docShape.id);
 
           const effectiveColumns = getEffectiveColumns(reordered.length);
-          const position = calculateGridPosition(
-            dropIndex,
-            docSize.w,
-            docSize.h,
-            effectiveColumns
-          );
+          const docPositionUpdates = reordered.map((id, index) => {
+            const pos = calculateGridPosition(index, docSize.w, docSize.h, effectiveColumns);
+            return { id, type: "document" as const, x: pos.x, y: pos.y };
+          });
           editor.updateShapes([
             {
               id: sourceCollection.id,
@@ -252,12 +250,7 @@ export function useCollectionDragHandler(editor: Editor | null) {
                 documentIds: reordered,
               } as CollectionShapeProps,
             },
-            {
-              id: docShape.id,
-              type: "document",
-              x: position.x,
-              y: position.y,
-            },
+            ...docPositionUpdates,
           ]);
         } else if (targetCollection) {
           const targetDropIndex =
