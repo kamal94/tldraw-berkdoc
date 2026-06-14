@@ -13,10 +13,10 @@
 # CLOUDFLARE_* env vars are present.
 
 name = "berkdoc-backend"
-migrations_dir = "migrations"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "berkdoc"
 # Populated by `wrangler d1 create berkdoc` when the database is provisioned.
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "26d0cdfa-cc44-4613-a8a8-2ffd992a5708"
+migrations_dir = "migrations"
