@@ -1,8 +1,10 @@
-import { Module } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
 import { DatabaseModule } from '../database/database.module';
+import { DatabaseService } from '../database/database.service';
 import { AvatarsService } from './avatars.service';
 import { AvatarsController } from './avatars.controller';
 import { DatabaseBlobAdapter } from './storage/database-blob.adapter';
+import { createAvatarStorageAdapter } from './storage';
 
 @Module({
   imports: [DatabaseModule],
@@ -12,7 +14,12 @@ import { DatabaseBlobAdapter } from './storage/database-blob.adapter';
     DatabaseBlobAdapter,
     {
       provide: 'AvatarStorageAdapter',
-      useClass: DatabaseBlobAdapter,
+      useFactory: (databaseService: DatabaseService) =>
+        createAvatarStorageAdapter(
+          databaseService,
+          new Logger('AvatarStorage'),
+        ),
+      inject: [DatabaseService],
     },
   ],
   exports: [AvatarsService],
