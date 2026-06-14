@@ -77,7 +77,7 @@ export class SmartExplorerService {
     userId: string,
     results: Array<{ documentId: string }>,
   ): Promise<number> {
-    const boards = this.boardsService.listBoards(userId);
+    const boards = await this.boardsService.listBoards(userId);
     const targetBoard = boards[0];
     if (!targetBoard) return 0;
 

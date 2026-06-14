@@ -22,7 +22,7 @@ export class OnboardingController {
    * Get current onboarding status for the authenticated user
    */
   @Get('status')
-  getStatus(@CurrentUser() user: User): OnboardingStatusResponseDto {
+  getStatus(@CurrentUser() user: User): Promise<OnboardingStatusResponseDto> {
     return this.onboardingService.getStatus(user.id);
   }
 
@@ -30,9 +30,11 @@ export class OnboardingController {
    * Check if user needs onboarding
    */
   @Get('needs-onboarding')
-  needsOnboarding(@CurrentUser() user: User): { needsOnboarding: boolean } {
+  async needsOnboarding(
+    @CurrentUser() user: User,
+  ): Promise<{ needsOnboarding: boolean }> {
     return {
-      needsOnboarding: this.onboardingService.needsOnboarding(user.id),
+      needsOnboarding: await this.onboardingService.needsOnboarding(user.id),
     };
   }
 
@@ -53,7 +55,9 @@ export class OnboardingController {
    * Get metadata scan progress
    */
   @Get('metadata-scan-progress')
-  getMetadataScanProgress(@CurrentUser() user: User): MetadataScanProgressResponseDto {
+  getMetadataScanProgress(
+    @CurrentUser() user: User,
+  ): Promise<MetadataScanProgressResponseDto> {
     return this.onboardingService.getMetadataScanProgress(user.id);
   }
 
@@ -69,7 +73,7 @@ export class OnboardingController {
    * Get the drive snapshot (metadata scan results)
    */
   @Get('drive-snapshot')
-  getDriveSnapshot(@CurrentUser() user: User): DriveSnapshotResponseDto {
+  getDriveSnapshot(@CurrentUser() user: User): Promise<DriveSnapshotResponseDto> {
     return this.onboardingService.getDriveSnapshot(user.id);
   }
 
@@ -77,8 +81,10 @@ export class OnboardingController {
    * Complete review - marks that user has reviewed scan results and moves to step 3
    */
   @Post('complete-review')
-  completeReview(@CurrentUser() user: User): { message: string } {
-    this.onboardingService.completeReview(user.id);
+  async completeReview(
+    @CurrentUser() user: User,
+  ): Promise<{ message: string }> {
+    await this.onboardingService.completeReview(user.id);
     return {
       message: 'Review completed. You can now proceed to prepare your documents.',
     };
@@ -104,7 +110,7 @@ export class OnboardingController {
    * Get processing progress
    */
   @Get('progress')
-  getProgress(@CurrentUser() user: User): ProcessingProgressResponseDto {
+  getProgress(@CurrentUser() user: User): Promise<ProcessingProgressResponseDto> {
     return this.onboardingService.getProgress(user.id);
   }
 
@@ -116,7 +122,7 @@ export class OnboardingController {
    * Get telemetry data for the current user
    */
   @Get('telemetry/me')
-  getMyTelemetry(@CurrentUser() user: User): UserTelemetry | null {
+  getMyTelemetry(@CurrentUser() user: User): Promise<UserTelemetry | null> {
     return this.onboardingService.getTelemetryForUser(user.id);
   }
 
@@ -125,7 +131,7 @@ export class OnboardingController {
    * Note: In production, this should be protected by admin-only guard
    */
   @Get('telemetry/aggregate')
-  getAggregateTelemetry(): AggregateTelemetry {
+  getAggregateTelemetry(): Promise<AggregateTelemetry> {
     return this.onboardingService.getAggregateTelemetry();
   }
 }

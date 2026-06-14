@@ -75,7 +75,7 @@ export class BoardsRoomManager {
     }
 
     // Load board from database
-    const boardRow = this.databaseService.findBoardById(boardId);
+    const boardRow = await this.databaseService.findBoardById(boardId);
     let initialSnapshot: RoomSnapshot | undefined;
 
     if (!boardRow) {
@@ -97,7 +97,17 @@ export class BoardsRoomManager {
       const room = this.rooms.get(boardId);
       if (room && !room.isClosed()) {
         const snapshot = room.getCurrentSnapshot();
-        this.databaseService.updateBoardSnapshot(boardId, JSON.stringify(snapshot));
+        void this.databaseService
+          .updateBoardSnapshot(boardId, JSON.stringify(snapshot))
+          .then(() =>
+            this.logger.debug(`Persisted snapshot for board ${boardId}`),
+          )
+          .catch((error) =>
+            this.logger.error(
+              `Failed to persist snapshot for board ${boardId}:`,
+              error,
+            ),
+          );
       }
     }, 1000);
 
@@ -154,7 +164,14 @@ export class BoardsRoomManager {
     if (room && !room.isClosed()) {
       // Final persist before closing
       const snapshot = room.getCurrentSnapshot();
-      this.databaseService.updateBoardSnapshot(boardId, JSON.stringify(snapshot));
+      void this.databaseService
+        .updateBoardSnapshot(boardId, JSON.stringify(snapshot))
+        .catch((error) =>
+          this.logger.error(
+            `Failed to persist snapshot for board ${boardId}:`,
+            error,
+          ),
+        );
       room.close();
     }
     this.rooms.delete(boardId);

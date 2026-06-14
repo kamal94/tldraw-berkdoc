@@ -56,7 +56,7 @@ export class GoogleDriveService {
   ) { }
 
   async getDriveClient(userId: string) {
-    const user = this.databaseService.findUserById(userId);
+    const user = await this.databaseService.findUserById(userId);
     if (!user || !user.google_access_token) {
       throw new UnauthorizedException('User has no Google account linked or tokens missing');
     }
@@ -76,11 +76,15 @@ export class GoogleDriveService {
     // Handle token refresh
     oauth2Client.on('tokens', (tokens) => {
       this.logger.log(`Refreshing tokens for user ${userId}`);
-      this.databaseService.updateUser(userId, {
-        googleAccessToken: tokens.access_token || undefined,
-        googleRefreshToken: tokens.refresh_token || undefined,
-        googleTokenExpiry: tokens.expiry_date || undefined,
-      });
+      void this.databaseService
+        .updateUser(userId, {
+          googleAccessToken: tokens.access_token || undefined,
+          googleRefreshToken: tokens.refresh_token || undefined,
+          googleTokenExpiry: tokens.expiry_date || undefined,
+        })
+        .catch((error) =>
+          this.logger.error(`Failed to persist refreshed tokens for ${userId}`, error),
+        );
     });
 
     return google.drive({ version: 'v3', auth: oauth2Client });

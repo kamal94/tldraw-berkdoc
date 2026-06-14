@@ -17,7 +17,7 @@ export class AuthService {
   private readonly logger = new Logger(AuthService.name);
   async register(dto: RegisterDto): Promise<AuthResponseDto> {
     // Check if email already exists
-    const existingUser = this.databaseService.findUserByEmail(dto.email);
+    const existingUser = await this.databaseService.findUserByEmail(dto.email);
     if (existingUser) {
       throw new ConflictException('Email already registered');
     }
@@ -35,7 +35,7 @@ export class AuthService {
       updatedAt: new Date(),
     };
 
-    this.databaseService.createUser({
+    await this.databaseService.createUser({
       id: user.id,
       email: user.email,
       name: user.name,
@@ -47,7 +47,7 @@ export class AuthService {
   }
 
   async login(dto: LoginDto): Promise<AuthResponseDto> {
-    const userRow = this.databaseService.findUserByEmail(dto.email);
+    const userRow = await this.databaseService.findUserByEmail(dto.email);
     if (!userRow || !userRow.password_hash) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -75,24 +75,26 @@ export class AuthService {
     const tokenExpiry = tokens?.expiresIn ? Date.now() + tokens.expiresIn * 1000 : undefined;
 
     // Check if user exists by Google ID
-    const existingGoogleUser = this.databaseService.findUserByProviderId(googleId);
+    const existingGoogleUser = await this.databaseService.findUserByProviderId(googleId);
     if (existingGoogleUser) {
       // Update tokens if provided
       if (tokens) {
-        this.databaseService.updateUser(existingGoogleUser.id, {
+        await this.databaseService.updateUser(existingGoogleUser.id, {
           googleAccessToken: tokens.accessToken,
           googleRefreshToken: tokens.refreshToken,
           googleTokenExpiry: tokenExpiry,
         });
       }
-      return this.rowToUser(this.databaseService.findUserByProviderId(googleId)!);
+      return this.rowToUser(
+        (await this.databaseService.findUserByProviderId(googleId))!,
+      );
     }
 
     // Check if user exists by email
-    const existingEmailUser = this.databaseService.findUserByEmail(email);
+    const existingEmailUser = await this.databaseService.findUserByEmail(email);
     if (existingEmailUser) {
       // Link Google account to existing user
-      this.databaseService.updateUser(existingEmailUser.id, {
+      await this.databaseService.updateUser(existingEmailUser.id, {
         providerId: googleId,
         provider: 'google',
         avatarUrl: profile.photos?.[0]?.value,
@@ -100,7 +102,9 @@ export class AuthService {
         googleRefreshToken: tokens?.refreshToken,
         googleTokenExpiry: tokenExpiry,
       });
-      return this.rowToUser(this.databaseService.findUserById(existingEmailUser.id)!);
+      return this.rowToUser(
+        (await this.databaseService.findUserById(existingEmailUser.id))!,
+      );
     }
 
     // Create new user
@@ -118,7 +122,7 @@ export class AuthService {
       updatedAt: new Date(),
     };
 
-    this.databaseService.createUser({
+    await this.databaseService.createUser({
       id: user.id,
       email: user.email,
       name: user.name,
@@ -134,7 +138,7 @@ export class AuthService {
   }
 
   async validateUserById(userId: string): Promise<User | null> {
-    const userRow = this.databaseService.findUserById(userId);
+    const userRow = await this.databaseService.findUserById(userId);
     if (!userRow) return null;
     return this.rowToUser(userRow);
   }

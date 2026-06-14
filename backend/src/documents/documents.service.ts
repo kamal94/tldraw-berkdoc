@@ -31,7 +31,7 @@ export class DocumentsService {
       updatedAt: new Date(),
     };
 
-    this.databaseService.createDocument({
+    await this.databaseService.createDocument({
       id: document.id,
       title: document.title,
       content: document.content,
@@ -64,12 +64,12 @@ export class DocumentsService {
   }
 
   async findAll(userId: string): Promise<Document[]> {
-    const rows = this.databaseService.findDocumentsByUserId(userId);
+    const rows = await this.databaseService.findDocumentsByUserId(userId);
     return rows.map((row) => this.rowToDocument(row));
   }
 
   async findOne(userId: string, documentId: string): Promise<Document> {
-    const row = this.databaseService.findDocumentById(documentId);
+    const row = await this.databaseService.findDocumentById(documentId);
 
     if (!row || row.user_id !== userId) {
       throw new NotFoundException('Document not found');
@@ -79,7 +79,8 @@ export class DocumentsService {
   }
 
   async findDocumentWithCollaboratorsById(userId: string, documentId: string): Promise<Document> {
-    const { document, collaborators } = this.databaseService.findDocumentWithCollaboratorsById(documentId);
+    const { document, collaborators } =
+      await this.databaseService.findDocumentWithCollaboratorsById(documentId);
 
     if (!document || document.user_id !== userId) {
       throw new NotFoundException('Document not found');
@@ -93,7 +94,7 @@ export class DocumentsService {
     const contentChanged = dto.content && dto.content !== existing.content;
 
     // Update in database
-    this.databaseService.updateDocument(documentId, {
+    await this.databaseService.updateDocument(documentId, {
       title: dto.title,
       content: dto.content,
       url: dto.url,
@@ -104,7 +105,7 @@ export class DocumentsService {
     });
 
     // Get updated document
-    const updatedRow = this.databaseService.findDocumentById(documentId)!;
+    const updatedRow = (await this.databaseService.findDocumentById(documentId))!;
     const document = this.rowToDocument(updatedRow);
 
     // If content changed, emit event for re-ingestion asynchronously
@@ -133,7 +134,7 @@ export class DocumentsService {
     // Verify ownership
     await this.findOne(userId, documentId);
 
-    this.databaseService.deleteDocument(documentId);
+    await this.databaseService.deleteDocument(documentId);
 
     // Emit event to remove from vector store asynchronously
     this.eventEmitter

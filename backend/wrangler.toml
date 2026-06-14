@@ -1,0 +1,22 @@
+# Cloudflare Wrangler config for the BerkDoc backend D1 database.
+#
+# Phase 1 keeps local development on bun:sqlite (no Cloudflare account needed).
+# This file exists so the same migrations in ./migrations can be provisioned and
+# applied against a real D1 instance in later phases via:
+#
+#   wrangler d1 create berkdoc
+#   wrangler d1 migrations apply berkdoc            # local emulation
+#   wrangler d1 migrations apply berkdoc --remote   # real D1
+#
+# The NestJS runtime itself reaches D1 over the HTTP API (see
+# src/database/drivers/d1-http.driver.ts), selected when DB_DRIVER=d1 or the
+# CLOUDFLARE_* env vars are present.
+
+name = "berkdoc-backend"
+migrations_dir = "migrations"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "berkdoc"
+# Populated by `wrangler d1 create berkdoc` when the database is provisioned.
+database_id = "00000000-0000-0000-0000-000000000000"

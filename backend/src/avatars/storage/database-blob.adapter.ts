@@ -10,10 +10,7 @@ export class DatabaseBlobAdapter implements AvatarStorageAdapter {
 
   async get(hash: string): Promise<{ buffer: Buffer; contentType: string } | null> {
     try {
-      const db = this.databaseService.getDatabase();
-      const result = db
-        .query('SELECT data, content_type FROM avatar_cache WHERE hash = ?')
-        .get(hash) as { data: Buffer; content_type: string } | undefined;
+      const result = await this.databaseService.getAvatarCache(hash);
 
       if (!result) {
         return null;
@@ -31,12 +28,7 @@ export class DatabaseBlobAdapter implements AvatarStorageAdapter {
 
   async set(hash: string, data: Buffer, contentType: string, originalUrl?: string): Promise<void> {
     try {
-      const db = this.databaseService.getDatabase();
-
-      db.query(
-        `INSERT OR REPLACE INTO avatar_cache (hash, content_type, data, original_url, created_at)
-         VALUES (?, ?, ?, ?, ?)`,
-      ).run(hash, contentType, data, originalUrl || '', new Date().toISOString());
+      await this.databaseService.setAvatarCache(hash, data, contentType, originalUrl);
     } catch (error) {
       this.logger.error(`Error storing avatar in cache: ${error}`);
       throw error;
@@ -45,12 +37,7 @@ export class DatabaseBlobAdapter implements AvatarStorageAdapter {
 
   async exists(hash: string): Promise<boolean> {
     try {
-      const db = this.databaseService.getDatabase();
-      const result = db
-        .query('SELECT 1 FROM avatar_cache WHERE hash = ? LIMIT 1')
-        .get(hash);
-
-      return !!result;
+      return await this.databaseService.avatarCacheExists(hash);
     } catch (error) {
       this.logger.error(`Error checking avatar existence: ${error}`);
       return false;
@@ -59,8 +46,7 @@ export class DatabaseBlobAdapter implements AvatarStorageAdapter {
 
   async delete(hash: string): Promise<void> {
     try {
-      const db = this.databaseService.getDatabase();
-      db.query('DELETE FROM avatar_cache WHERE hash = ?').run(hash);
+      await this.databaseService.deleteAvatarCache(hash);
     } catch (error) {
       this.logger.error(`Error deleting avatar from cache: ${error}`);
       throw error;

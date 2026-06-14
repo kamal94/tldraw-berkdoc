@@ -32,10 +32,10 @@ export class OnboardingListener {
     this.logger.log(`Starting metadata scan ${event.scanId} for user ${event.userId}`);
 
     // Clear any previous metadata-only documents for this user (those without content analyzed)
-    this.databaseService.deleteDocumentsMetadataByUserId(event.userId);
+    await this.databaseService.deleteDocumentsMetadataByUserId(event.userId);
 
     // Get user's email to exclude author from collaborator count
-    const user = this.databaseService.findUserById(event.userId);
+    const user = await this.databaseService.findUserById(event.userId);
     const authorEmail = user?.email?.toLowerCase();
 
     try {
@@ -55,7 +55,7 @@ export class OnboardingListener {
           folderCount += batchFolderCount;
 
           // Use shared processing service to process batch
-          const result = this.driveFileProcessor.processFileMetadataBatch(
+          const result = await this.driveFileProcessor.processFileMetadataBatch(
             batchFiles,
             event.userId,
           );
@@ -63,14 +63,14 @@ export class OnboardingListener {
           // Store each file's metadata to database (including URL and classification)
           // File type breakdown is now computed from documents table, not stored in onboarding
           for (const processed of result.processedFiles) {
-            this.driveFileProcessor.storeFileMetadata(
+            await this.driveFileProcessor.storeFileMetadata(
               event.userId,
               processed.file,
               processed,
             );
 
             // Increment scan progress counter
-            this.databaseService.incrementMetadataFilesScanned(event.userId);
+            await this.databaseService.incrementMetadataFilesScanned(event.userId);
           }
 
           // Aggregate results across batches
@@ -93,7 +93,7 @@ export class OnboardingListener {
           // Update onboarding table incrementally after each batch for live stats
           // Don't mark as complete during incremental updates
           // File type breakdown is computed from documents table when needed
-          this.onboardingService.updateMetadataSnapshot(
+          await this.onboardingService.updateMetadataSnapshot(
             event.userId,
             {
               totalFileCount: totalSupportedFileCount + totalUnsupportedFileCount,
@@ -112,7 +112,7 @@ export class OnboardingListener {
 
       // Final update with complete snapshot - mark as complete
       // File type breakdown is computed from documents table when needed
-      this.onboardingService.updateMetadataSnapshot(
+      await this.onboardingService.updateMetadataSnapshot(
         event.userId,
         {
           totalFileCount: snapshot.totalFileCount,
@@ -128,7 +128,7 @@ export class OnboardingListener {
       );
 
       // Track estimated cost for telemetry
-      this.onboardingService.updateEstimatedCost(event.userId, totalSupportedFileCount);
+      await this.onboardingService.updateEstimatedCost(event.userId, totalSupportedFileCount);
 
       // Emit completion event
       this.eventEmitter.emit(

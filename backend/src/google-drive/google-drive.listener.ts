@@ -27,12 +27,12 @@ export class GoogleDriveSyncListener {
 
     // CRITICAL GUARDRAIL: Check if user has confirmed processing
     // This prevents content processing (embeddings, LLM) before explicit consent
-    const onboarding = this.databaseService.findOnboardingByUserId(event.userId);
+    const onboarding = await this.databaseService.findOnboardingByUserId(event.userId);
     if (onboarding?.processing_confirmed_at) {
       // User has confirmed, proceed
     } else {
       // Check if this is an existing user with documents (grandfathered in)
-      const existingDocs = this.databaseService.findDocumentsByUserId(event.userId);
+      const existingDocs = await this.databaseService.findDocumentsByUserId(event.userId);
       if (existingDocs.length === 0) {
         this.logger.warn(
           `Processing blocked for user ${event.userId}: onboarding not confirmed. ` +
@@ -103,7 +103,7 @@ export class GoogleDriveSyncListener {
         this.logger.log(`Processing file ${file.name} (${file.id}) for user ${userId}`);
 
         try {
-          const existingDoc = this.databaseService.findDocumentByGoogleFileId(file.id);
+          const existingDoc = await this.databaseService.findDocumentByGoogleFileId(file.id);
 
           // Skip if already synced, not modified, AND content has been analyzed
           // But still count it toward onboarding completion
@@ -113,7 +113,7 @@ export class GoogleDriveSyncListener {
             existingDoc.content_last_analyzed
           ) {
             this.logger.debug(`File ${file.name} is already up to date, skipping.`);
-            this.databaseService.incrementFilesProcessed(userId);
+            await this.databaseService.incrementFilesProcessed(userId);
             return;
           }
 
@@ -134,7 +134,7 @@ export class GoogleDriveSyncListener {
             );
 
           // Get user's email to exclude author from collaborator list
-          const user = this.databaseService.findUserById(userId);
+          const user = await this.databaseService.findUserById(userId);
           const authorEmail = user?.email;
 
           // Extract collaborators from permissions and revisions (exclude author)
@@ -145,8 +145,8 @@ export class GoogleDriveSyncListener {
             this.logger.log(`Updating existing document for ${file.name}`);
 
             // Delete old collaborators and insert new ones
-            this.databaseService.deleteCollaboratorsByDocumentId(existingDoc.id);
-            this.databaseService.upsertCollaboratorsForDocument(
+            await this.databaseService.deleteCollaboratorsByDocumentId(existingDoc.id);
+            await this.databaseService.upsertCollaboratorsForDocument(
               existingDoc.id,
               collaborators,
             );
@@ -169,20 +169,20 @@ export class GoogleDriveSyncListener {
             });
 
             // Store collaborators after document creation
-            this.databaseService.upsertCollaboratorsForDocument(
+            await this.databaseService.upsertCollaboratorsForDocument(
               document.id,
               collaborators,
             );
           }
 
           // Track progress for onboarding
-          this.databaseService.incrementFilesProcessed(userId);
+          await this.databaseService.incrementFilesProcessed(userId);
         } catch (error) {
           this.logger.error(`Failed to process file ${file.name} for user ${userId}`, error);
           // Still increment counter for onboarding completion tracking
           // This prevents failed files from blocking completion
           // Failed files are tracked separately by queue service stats
-          this.databaseService.incrementFilesProcessed(userId);
+          await this.databaseService.incrementFilesProcessed(userId);
           throw error; // Re-throw so queue service can track failures
         }
       },
