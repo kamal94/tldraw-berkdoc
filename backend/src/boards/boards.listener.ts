@@ -22,11 +22,11 @@ export class BoardsListener {
     this.logger.log(`Handling document.created event for document ${event.id}`);
 
     try {
-      const boards = this.boardsService.listBoards(event.userId);
+      const boards = await this.boardsService.listBoards(event.userId);
       const targetBoard = boards[0];
       if (!targetBoard) return;
 
-      const document = this.getDocumentFromDatabase(event.id);
+      const document = await this.getDocumentFromDatabase(event.id);
       if (!document) return;
 
       await this.boardsService.addDocumentShape(targetBoard.id, document);
@@ -39,8 +39,10 @@ export class BoardsListener {
     }
   }
 
-  private getDocumentFromDatabase(documentId: string): Document | null {
-    const docRow = this.databaseService.findDocumentById(documentId);
+  private async getDocumentFromDatabase(
+    documentId: string,
+  ): Promise<Document | null> {
+    const docRow = await this.databaseService.findDocumentById(documentId);
     if (!docRow) {
       this.logger.warn(`Document ${documentId} not found in database`);
       return null;
@@ -65,7 +67,7 @@ export class BoardsListener {
     this.logger.log(`Handling document.deleted event for document ${event.id}`);
 
     try {
-      const boards = this.boardsService.listBoards(event.userId);
+      const boards = await this.boardsService.listBoards(event.userId);
       if (boards.length === 0) return;
 
       for (const board of boards) {

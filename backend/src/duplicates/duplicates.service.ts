@@ -107,7 +107,7 @@ export class DuplicatesService {
             processedPairs.add(pairKey);
 
             // Check if duplicate already exists
-            const existing = this.findExistingDuplicate(
+            const existing = await this.findExistingDuplicate(
               userId,
               sourceDocId,
               targetDocId,
@@ -119,7 +119,7 @@ export class DuplicatesService {
             if (!existing) {
               // Create duplicate record
               const duplicateId = this.generateId();
-              this.databaseService.createDocumentDuplicate({
+              await this.databaseService.createDocumentDuplicate({
                 id: duplicateId,
                 userId,
                 sourceDocumentId: sourceDocId,
@@ -153,7 +153,7 @@ export class DuplicatesService {
     userId: string,
     documentId: string,
   ): Promise<DuplicateResult[]> {
-    const rows = this.databaseService.findDuplicatesByDocumentId(documentId);
+    const rows = await this.databaseService.findDuplicatesByDocumentId(documentId);
     return rows
       .filter((row) => row.user_id === userId)
       .map((row) => this.rowToDuplicate(row));
@@ -163,7 +163,7 @@ export class DuplicatesService {
    * Find all duplicates for a user
    */
   async findDuplicatesForUser(userId: string): Promise<DuplicateResult[]> {
-    const rows = this.databaseService.findDuplicatesByUserId(userId);
+    const rows = await this.databaseService.findDuplicatesByUserId(userId);
     return rows.map((row) => this.rowToDuplicate(row));
   }
 
@@ -171,7 +171,7 @@ export class DuplicatesService {
    * Delete all duplicate records for a document
    */
   async deleteDuplicatesForDocument(documentId: string): Promise<void> {
-    this.databaseService.deleteDuplicatesByDocumentId(documentId);
+    await this.databaseService.deleteDuplicatesByDocumentId(documentId);
   }
 
   /**
@@ -181,11 +181,11 @@ export class DuplicatesService {
     this.logger.log(`Clearing all duplicates for user ${userId}`);
     
     // Get count before deletion for logging
-    const duplicates = this.databaseService.findDuplicatesByUserId(userId);
+    const duplicates = await this.databaseService.findDuplicatesByUserId(userId);
     const count = duplicates.length;
     
     // Delete all duplicates for the user
-    this.databaseService.deleteDuplicatesByUserId(userId);
+    await this.databaseService.deleteDuplicatesByUserId(userId);
     
     this.logger.log(`Cleared ${count} duplicate records for user ${userId}`);
     return count;
@@ -214,15 +214,15 @@ export class DuplicatesService {
   /**
    * Check if a duplicate already exists
    */
-  private findExistingDuplicate(
+  private async findExistingDuplicate(
     userId: string,
     sourceDocumentId: string,
     targetDocumentId: string,
     sourceChunkIndex: number | undefined,
     targetChunkIndex: number | undefined,
     duplicateType: 'chunk' | 'document',
-  ): DuplicateRow | null {
-    const allDuplicates = this.databaseService.findDuplicatesByUserId(userId);
+  ): Promise<DuplicateRow | null> {
+    const allDuplicates = await this.databaseService.findDuplicatesByUserId(userId);
     return (
       allDuplicates.find(
         (dup) =>

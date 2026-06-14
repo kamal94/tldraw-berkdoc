@@ -29,17 +29,17 @@ export class OnboardingService {
   /**
    * Get or create onboarding record for a user
    */
-  getOrCreateOnboarding(userId: string): OnboardingRow {
-    let onboarding = this.databaseService.findOnboardingByUserId(userId);
+  async getOrCreateOnboarding(userId: string): Promise<OnboardingRow> {
+    let onboarding = await this.databaseService.findOnboardingByUserId(userId);
 
     if (!onboarding) {
       const id = `onboard_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-      this.databaseService.createOnboarding({
+      await this.databaseService.createOnboarding({
         id,
         userId,
         driveConnectedAt: new Date().toISOString(),
       });
-      onboarding = this.databaseService.findOnboardingByUserId(userId)!;
+      onboarding = (await this.databaseService.findOnboardingByUserId(userId))!;
       this.logger.log(`Created onboarding record for user ${userId}`);
     }
 
@@ -49,7 +49,7 @@ export class OnboardingService {
   /**
    * Get onboarding record by user ID
    */
-  findByUserId(userId: string): OnboardingRow | null {
+  async findByUserId(userId: string): Promise<OnboardingRow | null> {
     return this.databaseService.findOnboardingByUserId(userId);
   }
 
@@ -91,8 +91,8 @@ export class OnboardingService {
   /**
    * Get full onboarding status for a user
    */
-  getStatus(userId: string): OnboardingStatusResponseDto {
-    const onboarding = this.getOrCreateOnboarding(userId);
+  async getStatus(userId: string): Promise<OnboardingStatusResponseDto> {
+    const onboarding = await this.getOrCreateOnboarding(userId);
     const step = this.determineStep(onboarding);
 
     const isScanning = !!(
@@ -123,7 +123,7 @@ export class OnboardingService {
    * Start metadata scan for a user's Drive
    */
   async startMetadataScan(userId: string): Promise<string> {
-    const onboarding = this.getOrCreateOnboarding(userId);
+    const onboarding = await this.getOrCreateOnboarding(userId);
 
     // Don't allow re-scanning if already processing
     if (onboarding.processing_confirmed_at) {
@@ -134,7 +134,7 @@ export class OnboardingService {
     const now = new Date().toISOString();
 
     // Mark scan as started
-    this.databaseService.updateOnboarding(userId, {
+    await this.databaseService.updateOnboarding(userId, {
       metadataScanStartedAt: now,
     });
 
@@ -153,7 +153,7 @@ export class OnboardingService {
    * @param isComplete - If true, marks the scan as completed. Should only be true on final update.
    * Note: fileTypeBreakdown is now computed from documents table, not stored
    */
-  updateMetadataSnapshot(
+  async updateMetadataSnapshot(
     userId: string,
     snapshot: {
       totalFileCount: number;
@@ -166,7 +166,7 @@ export class OnboardingService {
       uniqueCollaboratorCount: number;
     },
     isComplete = false,
-  ): void {
+  ): Promise<void> {
     const updateData: Parameters<typeof this.databaseService.updateOnboarding>[1] = {
       totalFileCount: snapshot.totalFileCount,
       totalSizeBytes: snapshot.totalSizeBytes,
@@ -184,7 +184,7 @@ export class OnboardingService {
       updateData.metadataScanCompletedAt = now;
     }
 
-    this.databaseService.updateOnboarding(userId, updateData);
+    await this.databaseService.updateOnboarding(userId, updateData);
 
     this.logger.log(
       `Updated metadata snapshot for user ${userId}: ${snapshot.supportedFileCount} supported files${isComplete ? ' (scan complete)' : ''}`,
@@ -196,8 +196,8 @@ export class OnboardingService {
    * Works during scanning (returns partial data) or after completion
    * File type breakdown is now computed from documents table
    */
-  getDriveSnapshot(userId: string): DriveSnapshotResponseDto {
-    const onboarding = this.databaseService.findOnboardingByUserId(userId);
+  async getDriveSnapshot(userId: string): Promise<DriveSnapshotResponseDto> {
+    const onboarding = await this.databaseService.findOnboardingByUserId(userId);
 
     if (!onboarding) {
       throw new NotFoundException('Onboarding not found');
@@ -209,7 +209,7 @@ export class OnboardingService {
     }
 
     // Compute file type breakdown from documents table
-    const fileTypeBreakdown = this.databaseService.computeFileTypeBreakdown(userId);
+    const fileTypeBreakdown = await this.databaseService.computeFileTypeBreakdown(userId);
 
     const snapshot: DriveMetadataSnapshot = {
       totalFileCount: onboarding.total_file_count || 0,
@@ -238,8 +238,8 @@ export class OnboardingService {
   /**
    * Mark review as completed - moves user from step 2 to step 3
    */
-  completeReview(userId: string): void {
-    const onboarding = this.databaseService.findOnboardingByUserId(userId);
+  async completeReview(userId: string): Promise<void> {
+    const onboarding = await this.databaseService.findOnboardingByUserId(userId);
 
     if (!onboarding) {
       throw new NotFoundException('Onboarding not found');
@@ -255,7 +255,7 @@ export class OnboardingService {
     }
 
     const now = new Date().toISOString();
-    this.databaseService.updateOnboarding(userId, {
+    await this.databaseService.updateOnboarding(userId, {
       reviewCompletedAt: now,
     });
   }
@@ -264,7 +264,7 @@ export class OnboardingService {
    * Confirm processing - this is the critical gate before content processing begins
    */
   async confirmProcessing(userId: string, options?: ProcessingOptions): Promise<string> {
-    const onboarding = this.databaseService.findOnboardingByUserId(userId);
+    const onboarding = await this.databaseService.findOnboardingByUserId(userId);
 
     if (!onboarding) {
       throw new NotFoundException('Onboarding not found');
@@ -281,7 +281,7 @@ export class OnboardingService {
     const now = new Date().toISOString();
 
     // Update onboarding with confirmation
-    this.databaseService.updateOnboarding(userId, {
+    await this.databaseService.updateOnboarding(userId, {
       processingConfirmedAt: now,
       processingStartedAt: now,
       processingOptions: options || {},
@@ -302,8 +302,8 @@ export class OnboardingService {
   /**
    * Get processing progress for a user
    */
-  getProgress(userId: string): ProcessingProgressResponseDto {
-    let onboarding = this.databaseService.findOnboardingByUserId(userId);
+  async getProgress(userId: string): Promise<ProcessingProgressResponseDto> {
+    let onboarding = await this.databaseService.findOnboardingByUserId(userId);
 
     if (!onboarding) {
       throw new NotFoundException('Onboarding not found');
@@ -321,8 +321,8 @@ export class OnboardingService {
         this.logger.log(
           `Auto-completing onboarding for user ${userId}: ${filesProcessed}/${filesTotal} (${(actualPercent * 100).toFixed(2)}%)`,
         );
-        this.markProcessingComplete(userId);
-        onboarding = this.databaseService.findOnboardingByUserId(userId);
+        await this.markProcessingComplete(userId);
+        onboarding = await this.databaseService.findOnboardingByUserId(userId);
         isComplete = true;
       }
     }
@@ -333,8 +333,8 @@ export class OnboardingService {
         filesTotal,
         percentComplete,
         isComplete,
-        startedAt: onboarding.processing_started_at,
-        completedAt: onboarding.processing_completed_at,
+        startedAt: onboarding?.processing_started_at ?? null,
+        completedAt: onboarding?.processing_completed_at ?? null,
       },
     };
   }
@@ -342,15 +342,15 @@ export class OnboardingService {
   /**
    * Get metadata scan progress for a user
    */
-  getMetadataScanProgress(userId: string): MetadataScanProgressResponseDto {
-    const onboarding = this.databaseService.findOnboardingByUserId(userId);
+  async getMetadataScanProgress(userId: string): Promise<MetadataScanProgressResponseDto> {
+    const onboarding = await this.databaseService.findOnboardingByUserId(userId);
 
     if (!onboarding) {
       throw new NotFoundException('Onboarding not found');
     }
 
     // Get actual count from documents table
-    const filesScanned = this.databaseService.countDocumentsWithMetadata(userId);
+    const filesScanned = await this.databaseService.countDocumentsWithMetadata(userId);
     const isComplete = !!onboarding.metadata_scan_completed_at;
 
     return {
@@ -364,15 +364,15 @@ export class OnboardingService {
   /**
    * Get live scan stats from onboarding table (for real-time updates during scanning)
    */
-  getLiveScanStats(userId: string): {
+  async getLiveScanStats(userId: string): Promise<{
     filesScanned: number;
     supportedCount: number;
     unsupportedCount: number;
     sharedCount: number;
     collaboratorCount: number;
     totalSizeBytes: number;
-  } {
-    const onboarding = this.databaseService.findOnboardingByUserId(userId);
+  }> {
+    const onboarding = await this.databaseService.findOnboardingByUserId(userId);
     
     if (!onboarding) {
       return {
@@ -386,7 +386,7 @@ export class OnboardingService {
     }
 
     // Get actual count from documents table
-    const filesScanned = this.databaseService.countDocumentsWithMetadata(userId);
+    const filesScanned = await this.databaseService.countDocumentsWithMetadata(userId);
 
     // Use aggregated counts from onboarding table (updated incrementally)
     return {
@@ -402,16 +402,16 @@ export class OnboardingService {
   /**
    * Mark a file as processed and update progress
    */
-  markFileProcessed(userId: string): void {
-    this.databaseService.incrementFilesProcessed(userId);
+  async markFileProcessed(userId: string): Promise<void> {
+    await this.databaseService.incrementFilesProcessed(userId);
   }
 
   /**
    * Mark processing as complete
    */
-  markProcessingComplete(userId: string): void {
+  async markProcessingComplete(userId: string): Promise<void> {
     const now = new Date().toISOString();
-    this.databaseService.updateOnboarding(userId, {
+    await this.databaseService.updateOnboarding(userId, {
       processingCompletedAt: now,
     });
     this.logger.log(`Processing completed for user ${userId}`);
@@ -420,19 +420,19 @@ export class OnboardingService {
   /**
    * Check if user has confirmed processing (used as gate check)
    */
-  hasConfirmedProcessing(userId: string): boolean {
-    const onboarding = this.databaseService.findOnboardingByUserId(userId);
+  async hasConfirmedProcessing(userId: string): Promise<boolean> {
+    const onboarding = await this.databaseService.findOnboardingByUserId(userId);
     return !!onboarding?.processing_confirmed_at;
   }
 
   /**
    * Check if user needs onboarding (new user check)
    */
-  needsOnboarding(userId: string): boolean {
-    const onboarding = this.databaseService.findOnboardingByUserId(userId);
+  async needsOnboarding(userId: string): Promise<boolean> {
+    const onboarding = await this.databaseService.findOnboardingByUserId(userId);
 
     if (!onboarding) {
-      const existingDocs = this.databaseService.findDocumentsByUserId(userId);
+      const existingDocs = await this.databaseService.findDocumentsByUserId(userId);
       return existingDocs.length === 0;
     }
 
@@ -471,9 +471,9 @@ export class OnboardingService {
   /**
    * Update estimated cost after metadata scan
    */
-  updateEstimatedCost(userId: string, supportedFileCount: number): void {
+  async updateEstimatedCost(userId: string, supportedFileCount: number): Promise<void> {
     const estimatedCost = this.estimateProcessingCost(supportedFileCount);
-    this.databaseService.updateOnboarding(userId, {
+    await this.databaseService.updateOnboarding(userId, {
       estimatedCostUsd: estimatedCost,
     });
   }
@@ -481,8 +481,8 @@ export class OnboardingService {
   /**
    * Get telemetry data for a single user
    */
-  getTelemetryForUser(userId: string): UserTelemetry | null {
-    const onboarding = this.databaseService.findOnboardingByUserId(userId);
+  async getTelemetryForUser(userId: string): Promise<UserTelemetry | null> {
+    const onboarding = await this.databaseService.findOnboardingByUserId(userId);
     if (!onboarding) return null;
 
     const sharedDocRatio =
@@ -551,9 +551,8 @@ export class OnboardingService {
   /**
    * Get aggregate telemetry stats (for founders)
    */
-  getAggregateTelemetry(): AggregateTelemetry {
-    const db = this.databaseService.getDatabase();
-    const allOnboarding = db.query('SELECT * FROM onboarding').all() as OnboardingRow[];
+  async getAggregateTelemetry(): Promise<AggregateTelemetry> {
+    const allOnboarding = await this.databaseService.getAllOnboarding();
 
     if (allOnboarding.length === 0) {
       return this.createEmptyTelemetry();

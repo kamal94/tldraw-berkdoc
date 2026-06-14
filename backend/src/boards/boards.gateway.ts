@@ -115,7 +115,7 @@ export class BoardsGateway implements OnModuleInit, OnModuleDestroy {
   }
 
   private async validateBoardAccess(boardId: string, userId: string): Promise<boolean> {
-    const boardRow = this.databaseService.findBoardById(boardId);
+    const boardRow = await this.databaseService.findBoardById(boardId);
     if (!boardRow || boardRow.user_id !== userId) {
       this.logger.warn('WebSocket connection rejected: Board not found');
       return false;

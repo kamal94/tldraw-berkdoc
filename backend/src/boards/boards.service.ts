@@ -25,47 +25,47 @@ export class BoardsService {
     private readonly databaseService: DatabaseService
   ) {}
 
-  listBoards(userId: string): Board[] {
-    const rows = this.databaseService.findBoardsByUserId(userId);
+  async listBoards(userId: string): Promise<Board[]> {
+    const rows = await this.databaseService.findBoardsByUserId(userId);
     if (rows.length === 0) {
-      return [this.createBoard(userId, 'My Board')];
+      return [await this.createBoard(userId, 'My Board')];
     }
     return rows.map((row) => this.rowToBoard(row));
   }
 
-  createBoard(userId: string, name?: string): Board {
+  async createBoard(userId: string, name?: string): Promise<Board> {
     const boardId = crypto.randomUUID();
-    this.databaseService.createBoard({ id: boardId, userId, name });
-    const boardRow = this.databaseService.findBoardById(boardId);
+    await this.databaseService.createBoard({ id: boardId, userId, name });
+    const boardRow = await this.databaseService.findBoardById(boardId);
     if (!boardRow) {
       throw new NotFoundException('Board not found after creation');
     }
     return this.rowToBoard(boardRow);
   }
 
-  getBoardById(boardId: string, userId: string): Board {
-    const boardRow = this.databaseService.findBoardById(boardId);
+  async getBoardById(boardId: string, userId: string): Promise<Board> {
+    const boardRow = await this.databaseService.findBoardById(boardId);
     if (!boardRow || boardRow.user_id !== userId) {
       throw new NotFoundException('Board not found');
     }
     return this.rowToBoard(boardRow);
   }
 
-  updateBoardName(userId: string, boardId: string, name?: string): Board {
-    const board = this.getBoardById(boardId, userId);
+  async updateBoardName(userId: string, boardId: string, name?: string): Promise<Board> {
+    const board = await this.getBoardById(boardId, userId);
     if (!name) return board;
 
-    this.databaseService.updateBoardName(boardId, name);
-    const updatedRow = this.databaseService.findBoardById(boardId);
+    await this.databaseService.updateBoardName(boardId, name);
+    const updatedRow = await this.databaseService.findBoardById(boardId);
     if (!updatedRow) {
       throw new NotFoundException('Board not found');
     }
     return this.rowToBoard(updatedRow);
   }
 
-  deleteBoard(userId: string, boardId: string): void {
-    this.getBoardById(boardId, userId);
-    this.databaseService.deleteBoard(boardId);
+  async deleteBoard(userId: string, boardId: string): Promise<void> {
+    await this.getBoardById(boardId, userId);
+    await this.databaseService.deleteBoard(boardId);
   }
 
   /**

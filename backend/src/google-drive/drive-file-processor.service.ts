@@ -40,12 +40,12 @@ export class DriveFileProcessorService {
    * Process a batch of Drive files and extract metadata
    * This is the shared logic used by both onboarding and ingestion
    */
-  processFileMetadataBatch(
+  async processFileMetadataBatch(
     files: DriveFileMetadata[],
     userId: string,
-  ): FileMetadataProcessingResult {
+  ): Promise<FileMetadataProcessingResult> {
     // Get user's email to exclude author from collaborator count
-    const user = this.databaseService.findUserById(userId);
+    const user = await this.databaseService.findUserById(userId);
     const authorEmail = user?.email?.toLowerCase();
 
     const fileTypeBreakdown: FileTypeBreakdown = {};
@@ -136,12 +136,12 @@ export class DriveFileProcessorService {
    * Store file metadata to database (metadata-only, no content)
    * This is used during onboarding to create document records with metadata
    */
-  storeFileMetadata(
+  async storeFileMetadata(
     userId: string,
     file: DriveFileMetadata,
     processed: ProcessedFileMetadata,
-  ): void {
-    this.databaseService.upsertDocumentMetadata({
+  ): Promise<void> {
+    await this.databaseService.upsertDocumentMetadata({
       userId,
       googleFileId: file.id!,
       name: file.name!,
