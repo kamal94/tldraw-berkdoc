@@ -14,8 +14,7 @@ function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T 
   }) as T;
 }
 
-// Define validators for DocumentShapeProps
-const documentShapeProps = {
+const documentShapePropsValidators = {
 	w: T.number,
 	h: T.number,
 	title: T.string,
@@ -24,13 +23,22 @@ const documentShapeProps = {
 	contributors: T.arrayOf(
 		T.object({
 			name: T.string,
+			email: T.string.optional().nullable(),
 			avatarUrl: T.string.optional(),
 			color: T.string,
-      email: T.string.optional().nullable(),
 		})
 	),
 	tags: T.arrayOf(T.string),
 	summary: T.string.optional(),
+} as const;
+
+const collectionShapePropsValidators = {
+	w: T.number,
+	h: T.number,
+	label: T.string,
+	documentIds: T.arrayOf(T.string),
+	color: T.string,
+	dash: T.string,
 } as const;
 
 export const schema = createTLSchema({
@@ -38,7 +46,10 @@ export const schema = createTLSchema({
 		...defaultShapeSchemas,
 
 		document: {
-			props: documentShapeProps,
+			props: documentShapePropsValidators,
+		},
+		collection: {
+			props: collectionShapePropsValidators,
 		},
 	},
 	bindings: defaultBindingSchemas,
@@ -87,7 +98,6 @@ export class BoardsRoomManager {
       if (room && !room.isClosed()) {
         const snapshot = room.getCurrentSnapshot();
         this.databaseService.updateBoardSnapshot(boardId, JSON.stringify(snapshot));
-        this.logger.debug(`Persisted snapshot for board ${boardId}`);
       }
     }, 1000);
 

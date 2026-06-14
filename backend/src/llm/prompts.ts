@@ -9,7 +9,15 @@
 export function buildSummaryPrompt(content: string): string {
   // Clean and truncate content to avoid context window issues
   const cleanedContent = content.replace(/\s+/g, ' ').trim();
-  return `Summarize the following text in one concise sentence. Return your response as valid JSON in this exact format:
+  return `Style constraints:
+- Use an impersonal, agentless voice.
+- Do not reference the document, author, or reader (avoid phrases like "this document", "the report", "we", or "you").
+- Write in a title-like, ultra-compressed style.
+- Prefer a noun phrase or gerund phrase over a full sentence.
+- Use present tense with no temporal framing.
+
+Summarize the following text in one concise sentence.
+Return your response as valid JSON in this exact format:
 {
   "summary": "your one-sentence summary here"
 }
