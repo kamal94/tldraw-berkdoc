@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { EventEmitter2 } from '@nestjs/event-emitter';
+import { EventBusService } from '../events/event-bus.service';
 import { DatabaseService, type DocumentRow, type CollaboratorRow } from '../database/database.service';
 import type { Document } from './entities/document.entity';
 import type { CreateDocumentDto, UpdateDocumentDto } from './dto/document.dto';
@@ -14,7 +14,7 @@ export class DocumentsService {
   private readonly logger = new Logger(DocumentsService.name);
 
   constructor(
-    private eventEmitter: EventEmitter2,
+    private eventBus: EventBusService,
     private databaseService: DatabaseService,
   ) {}
 
@@ -44,8 +44,8 @@ export class DocumentsService {
     });
 
     // Emit event for ingestion pipeline asynchronously
-    this.eventEmitter
-      .emitAsync(
+    this.eventBus
+      .publish(
         'document.created',
         new DocumentCreatedEvent(
           document.id,
@@ -110,8 +110,8 @@ export class DocumentsService {
 
     // If content changed, emit event for re-ingestion asynchronously
     if (contentChanged) {
-      this.eventEmitter
-        .emitAsync(
+      this.eventBus
+        .publish(
           'document.updated',
           new DocumentUpdatedEvent(
             document.id,
@@ -137,8 +137,8 @@ export class DocumentsService {
     await this.databaseService.deleteDocument(documentId);
 
     // Emit event to remove from vector store asynchronously
-    this.eventEmitter
-      .emitAsync('document.deleted', new DocumentDeletedEvent(documentId, userId))
+    this.eventBus
+      .publish('document.deleted', new DocumentDeletedEvent(documentId, userId))
       .catch((error) => {
         // Log error but don't fail document deletion
         this.logger.error('Failed to emit document.deleted event', error);

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { EventsModule } from './events/events.module';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 import { DocumentsModule } from './documents/documents.module';
@@ -23,6 +24,7 @@ import { OnboardingModule } from './onboarding/onboarding.module';
       envFilePath: '.env',
     }),
     EventEmitterModule.forRoot(),
+    EventsModule,
     DatabaseModule,
     AuthModule,
     DocumentsModule,

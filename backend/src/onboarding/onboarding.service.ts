@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
-import { EventEmitter2 } from '@nestjs/event-emitter';
+import { EventBusService } from '../events/event-bus.service';
 import { DatabaseService, type OnboardingRow } from '../database/database.service';
 import { checkPlanLimits } from './plan-limits';
 import {
@@ -23,7 +23,7 @@ export class OnboardingService {
 
   constructor(
     private databaseService: DatabaseService,
-    private eventEmitter: EventEmitter2,
+    private eventBus: EventBusService,
   ) {}
 
   /**
@@ -139,7 +139,7 @@ export class OnboardingService {
     });
 
     // Emit event to trigger the scan
-    this.eventEmitter.emit(
+    await this.eventBus.publish(
       'onboarding.metadata.scan.requested',
       new MetadataScanRequestedEvent(userId, scanId),
     );
@@ -290,7 +290,7 @@ export class OnboardingService {
     });
 
     // Emit event to start processing
-    this.eventEmitter.emit(
+    await this.eventBus.publish(
       'onboarding.processing.confirmed',
       new ProcessingConfirmedEvent(userId, options || {}),
     );
