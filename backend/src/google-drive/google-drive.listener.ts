@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { OnEvent, EventEmitter2 } from '@nestjs/event-emitter';
+import { OnEvent } from '@nestjs/event-emitter';
+import { EventBusService } from '../events/event-bus.service';
 import { GoogleDriveService } from './google-drive.service';
 import { DatabaseService } from '../database/database.service';
 import { DocumentsService } from '../documents/documents.service';
@@ -17,7 +18,7 @@ export class GoogleDriveSyncListener {
     private googleDriveService: GoogleDriveService,
     private databaseService: DatabaseService,
     private documentsService: DocumentsService,
-    private eventEmitter: EventEmitter2,
+    private eventBus: EventBusService,
     private queueService: QueueService,
   ) {}
 
@@ -64,8 +65,8 @@ export class GoogleDriveSyncListener {
         for (const file of files) {
           if (!file.id || !file.name || !file.mimeType || !file.modifiedTime) continue;
           
-          // Use emitAsync to ensure events are processed asynchronously
-          this.eventEmitter.emitAsync(
+          // Publish through the event bus for asynchronous processing
+          this.eventBus.publish(
             'google.drive.file.discovered',
             new GoogleDriveFileDiscoveredEvent(event.userId, {
               id: file.id,

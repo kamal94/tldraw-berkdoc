@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { OnEvent, EventEmitter2 } from '@nestjs/event-emitter';
+import { OnEvent } from '@nestjs/event-emitter';
+import { EventBusService } from '../events/event-bus.service';
 import { OnboardingService } from './onboarding.service';
 import { GoogleDriveService, type DriveFileMetadata } from '../google-drive/google-drive.service';
 import { DriveFileProcessorService } from '../google-drive/drive-file-processor.service';
@@ -20,7 +21,7 @@ export class OnboardingListener {
     private googleDriveService: GoogleDriveService,
     private driveFileProcessor: DriveFileProcessorService,
     private databaseService: DatabaseService,
-    private eventEmitter: EventEmitter2,
+    private eventBus: EventBusService,
   ) {}
 
   /**
@@ -131,7 +132,7 @@ export class OnboardingListener {
       await this.onboardingService.updateEstimatedCost(event.userId, totalSupportedFileCount);
 
       // Emit completion event
-      this.eventEmitter.emit(
+      await this.eventBus.publish(
         'onboarding.metadata.scan.completed',
         new MetadataScanCompletedEvent(
           event.userId,
@@ -162,7 +163,7 @@ export class OnboardingListener {
 
     // Emit the Google Drive sync event which will now proceed
     // because the user has confirmed processing
-    this.eventEmitter.emit(
+    await this.eventBus.publish(
       'google.drive.sync.requested',
       new GoogleDriveSyncRequestedEvent(event.userId),
     );
