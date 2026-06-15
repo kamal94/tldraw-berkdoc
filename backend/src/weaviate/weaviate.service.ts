@@ -33,6 +33,33 @@ export class WeaviateService implements OnModuleInit {
   }
 
   private async connect() {
+    const driver = (this.configService.get<string>('WEAVIATE_DRIVER') ?? '').toLowerCase();
+    const cloudUrl = this.configService.get<string>('WEAVIATE_CLOUD_URL');
+    const cloudApiKey = this.configService.get<string>('WEAVIATE_CLOUD_API_KEY');
+    const useCloud =
+      driver === 'cloud' || (driver === '' && !!cloudUrl && !!cloudApiKey);
+
+    if (useCloud) {
+      if (!cloudUrl || !cloudApiKey) {
+        this.logger.error(
+          'WEAVIATE_DRIVER=cloud requires WEAVIATE_CLOUD_URL and WEAVIATE_CLOUD_API_KEY',
+        );
+        return;
+      }
+      try {
+        this.client = await weaviate.connectToWeaviateCloud(cloudUrl, {
+          authCredentials: new weaviate.ApiKey(cloudApiKey),
+        });
+        this.logger.log(`Connected to Weaviate Cloud at ${cloudUrl}`);
+      } catch (error) {
+        this.logger.error('Failed to connect to Weaviate Cloud', error);
+        this.logger.warn(
+          `Could not connect to Weaviate Cloud at ${cloudUrl}. Service will retry on first use.`,
+        );
+      }
+      return;
+    }
+
     const host = this.configService.get<string>('WEAVIATE_HOST', 'localhost');
     const port = this.configService.get<number>('WEAVIATE_PORT', 8080);
     const scheme = this.configService.get<string>('WEAVIATE_SCHEME', 'http');
