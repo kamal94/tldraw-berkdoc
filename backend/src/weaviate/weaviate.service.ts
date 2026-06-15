@@ -22,8 +22,9 @@ export interface DocumentData {
 export class WeaviateService implements OnModuleInit {
   private client!: WeaviateClient;
   private readonly logger = new Logger(WeaviateService.name);
-  private readonly collectionName = 'DocumentChunk';
-  private readonly documentCollectionName = 'Document';
+  private readonly collectionName = 'DocumentVector';
+  private readonly KIND_CHUNK = 'chunk';
+  private readonly KIND_DOCUMENT = 'document';
 
   constructor(private configService: ConfigService) {}
 
@@ -33,6 +34,33 @@ export class WeaviateService implements OnModuleInit {
   }
 
   private async connect() {
+    const driver = (this.configService.get<string>('WEAVIATE_DRIVER') ?? '').toLowerCase();
+    const cloudUrl = this.configService.get<string>('WEAVIATE_CLOUD_URL');
+    const cloudApiKey = this.configService.get<string>('WEAVIATE_CLOUD_API_KEY');
+    const useCloud =
+      driver === 'cloud' || (driver === '' && !!cloudUrl && !!cloudApiKey);
+
+    if (useCloud) {
+      if (!cloudUrl || !cloudApiKey) {
+        this.logger.error(
+          'WEAVIATE_DRIVER=cloud requires WEAVIATE_CLOUD_URL and WEAVIATE_CLOUD_API_KEY',
+        );
+        return;
+      }
+      try {
+        this.client = await weaviate.connectToWeaviateCloud(cloudUrl, {
+          authCredentials: new weaviate.ApiKey(cloudApiKey),
+        });
+        this.logger.log(`Connected to Weaviate Cloud at ${cloudUrl}`);
+      } catch (error) {
+        this.logger.error('Failed to connect to Weaviate Cloud', error);
+        this.logger.warn(
+          `Could not connect to Weaviate Cloud at ${cloudUrl}. Service will retry on first use.`,
+        );
+      }
+      return;
+    }
+
     const host = this.configService.get<string>('WEAVIATE_HOST', 'localhost');
     const port = this.configService.get<number>('WEAVIATE_PORT', 8080);
     const scheme = this.configService.get<string>('WEAVIATE_SCHEME', 'http');
@@ -59,12 +87,15 @@ export class WeaviateService implements OnModuleInit {
     }
 
     try {
-      // Ensure DocumentChunk collection exists
-      const chunkExists = await this.client.collections.exists(this.collectionName);
-      if (!chunkExists) {
-        const chunkCollectionConfig = {
+      // A single collection holds both per-chunk and per-document vectors,
+      // distinguished by the `kind` property. This keeps us within Weaviate
+      // plans that cap the number of collections.
+      const exists = await this.client.collections.exists(this.collectionName);
+      if (!exists) {
+        const collectionConfig = {
           name: this.collectionName,
           properties: [
+            { name: 'kind', dataType: 'text' },
             { name: 'documentId', dataType: 'text' },
             { name: 'chunkIndex', dataType: 'int' },
             { name: 'content', dataType: 'text' },
@@ -77,32 +108,10 @@ export class WeaviateService implements OnModuleInit {
             distance: 'cosine',
           },
         } as CollectionConfigCreate;
-        await this.client.collections.create(chunkCollectionConfig);
+        await this.client.collections.create(collectionConfig);
         this.logger.log(`Created collection: ${this.collectionName}`);
       } else {
         this.logger.log(`Collection ${this.collectionName} already exists`);
-      }
-
-      // Ensure Document collection exists
-      const documentExists = await this.client.collections.exists(this.documentCollectionName);
-      if (!documentExists) {
-        const documentCollectionConfig = {
-          name: this.documentCollectionName,
-          properties: [
-            { name: 'documentId', dataType: 'text' },
-            { name: 'title', dataType: 'text' },
-            { name: 'source', dataType: 'text' },
-            { name: 'userId', dataType: 'text' },
-          ],
-          vectorizers: [], // No vectorizer - we provide our own vectors
-          vectorIndexConfig: {
-            distance: 'cosine',
-          },
-        } as CollectionConfigCreate;
-        await this.client.collections.create(documentCollectionConfig);
-        this.logger.log(`Created collection: ${this.documentCollectionName}`);
-      } else {
-        this.logger.log(`Collection ${this.documentCollectionName} already exists`);
       }
     } catch (error) {
       this.logger.error('Failed to ensure schema', error);
@@ -117,6 +126,7 @@ export class WeaviateService implements OnModuleInit {
     const collection = this.client.collections.get(this.collectionName);
     const result = await collection.data.insert({
       properties: {
+        kind: this.KIND_CHUNK,
         documentId: data.documentId,
         chunkIndex: data.chunkIndex,
         content: data.content,
@@ -144,7 +154,10 @@ export class WeaviateService implements OnModuleInit {
     const result = await collection.query.nearVector(vector, {
       limit,
       returnMetadata: ['distance'],
-      filters: collection.filter.byProperty('userId').equal(userId),
+      filters: Filters.and(
+        collection.filter.byProperty('kind').equal(this.KIND_CHUNK),
+        collection.filter.byProperty('userId').equal(userId),
+      ),
     });
 
     return result.objects.map((obj) => ({
@@ -166,6 +179,7 @@ export class WeaviateService implements OnModuleInit {
     const collection = this.client.collections.get(this.collectionName);
     await collection.data.deleteMany(
       Filters.and(
+        collection.filter.byProperty('kind').equal(this.KIND_CHUNK),
         collection.filter.byProperty('documentId').equal(documentId),
         collection.filter.byProperty('userId').equal(userId),
       ),
@@ -181,7 +195,10 @@ export class WeaviateService implements OnModuleInit {
 
     const collection = this.client.collections.get(this.collectionName);
     await collection.data.deleteMany(
-      collection.filter.byProperty('userId').equal(userId),
+      Filters.and(
+        collection.filter.byProperty('kind').equal(this.KIND_CHUNK),
+        collection.filter.byProperty('userId').equal(userId),
+      ),
     );
 
     this.logger.debug(`Deleted chunks for user ${userId}`);
@@ -194,7 +211,7 @@ export class WeaviateService implements OnModuleInit {
 
     const collection = this.client.collections.get(this.collectionName);
     await collection.data.deleteMany(
-      collection.filter.byProperty('chunkIndex').greaterThan(-1), // This will match all
+      collection.filter.byProperty('kind').equal(this.KIND_CHUNK),
     );
 
     this.logger.debug('Cleared all chunks from Weaviate');
@@ -208,6 +225,7 @@ export class WeaviateService implements OnModuleInit {
     const collection = this.client.collections.get(this.collectionName);
     const result = await collection.query.fetchObjects({
       filters: Filters.and(
+        collection.filter.byProperty('kind').equal(this.KIND_CHUNK),
         collection.filter.byProperty('documentId').equal(documentId),
         collection.filter.byProperty('userId').equal(userId),
       ),
@@ -238,7 +256,10 @@ export class WeaviateService implements OnModuleInit {
     // Fetch in batches to handle more than 10k chunks
     do {
       const result = await collection.query.fetchObjects({
-        filters: collection.filter.byProperty('userId').equal(userId),
+        filters: Filters.and(
+          collection.filter.byProperty('kind').equal(this.KIND_CHUNK),
+          collection.filter.byProperty('userId').equal(userId),
+        ),
         limit: batchSize,
         includeVector: true, // Use boolean for includeVector
         after: cursor,
@@ -326,6 +347,7 @@ export class WeaviateService implements OnModuleInit {
     const collection = this.client.collections.get(this.collectionName);
     const result = await collection.query.fetchObjects({
       filters: Filters.and(
+        collection.filter.byProperty('kind').equal(this.KIND_CHUNK),
         collection.filter.byProperty('documentId').equal(documentId),
         collection.filter.byProperty('userId').equal(userId),
       ),
@@ -400,12 +422,13 @@ export class WeaviateService implements OnModuleInit {
       throw new Error(`Cannot store empty vector for document ${data.documentId}`);
     }
 
-    const collection = this.client.collections.get(this.documentCollectionName);
+    const collection = this.client.collections.get(this.collectionName);
     
     // First, delete any existing document embedding to avoid duplicates
     try {
       await collection.data.deleteMany(
         Filters.and(
+          collection.filter.byProperty('kind').equal(this.KIND_DOCUMENT),
           collection.filter.byProperty('documentId').equal(data.documentId),
           collection.filter.byProperty('userId').equal(data.userId),
         ),
@@ -418,6 +441,7 @@ export class WeaviateService implements OnModuleInit {
     // Insert with vectors (plural) - Weaviate v3 client requires 'vectors' not 'vector'
     const result = await collection.data.insert({
       properties: {
+        kind: this.KIND_DOCUMENT,
         documentId: data.documentId,
         title: data.title,
         source: data.source,
@@ -442,12 +466,15 @@ export class WeaviateService implements OnModuleInit {
       throw new Error('Weaviate client not connected');
     }
     this.logger.debug(`Searching for similar documents for user ${userId} with vector ${vector.length} and limit ${limit}`);
-    const collection = this.client.collections.get(this.documentCollectionName);
+    const collection = this.client.collections.get(this.collectionName);
     const result = await collection.query.nearVector(vector, {
       limit: 2000,
       certainty: 0.6,
       returnMetadata: ['distance'],
-      filters: collection.filter.byProperty('userId').equal(userId),
+      filters: Filters.and(
+        collection.filter.byProperty('kind').equal(this.KIND_DOCUMENT),
+        collection.filter.byProperty('userId').equal(userId),
+      ),
     });
 
     return result.objects.map((obj) => ({
@@ -470,9 +497,10 @@ export class WeaviateService implements OnModuleInit {
       throw new Error('Weaviate client not connected');
     }
 
-    const collection = this.client.collections.get(this.documentCollectionName);
+    const collection = this.client.collections.get(this.collectionName);
     const result = await collection.query.fetchObjects({
       filters: Filters.and(
+        collection.filter.byProperty('kind').equal(this.KIND_DOCUMENT),
         collection.filter.byProperty('documentId').equal(documentId),
         collection.filter.byProperty('userId').equal(userId),
       ),
@@ -544,9 +572,10 @@ export class WeaviateService implements OnModuleInit {
       throw new Error('Weaviate client not connected');
     }
 
-    const collection = this.client.collections.get(this.documentCollectionName);
+    const collection = this.client.collections.get(this.collectionName);
     await collection.data.deleteMany(
       Filters.and(
+        collection.filter.byProperty('kind').equal(this.KIND_DOCUMENT),
         collection.filter.byProperty('documentId').equal(documentId),
         collection.filter.byProperty('userId').equal(userId),
       ),
@@ -563,9 +592,12 @@ export class WeaviateService implements OnModuleInit {
       throw new Error('Weaviate client not connected');
     }
 
-    const collection = this.client.collections.get(this.documentCollectionName);
+    const collection = this.client.collections.get(this.collectionName);
     await collection.data.deleteMany(
-      collection.filter.byProperty('userId').equal(userId),
+      Filters.and(
+        collection.filter.byProperty('kind').equal(this.KIND_DOCUMENT),
+        collection.filter.byProperty('userId').equal(userId),
+      ),
     );
 
     this.logger.debug(`Deleted all document embeddings for user ${userId}`);
@@ -581,14 +613,17 @@ export class WeaviateService implements OnModuleInit {
       throw new Error('Weaviate client not connected');
     }
 
-    const collection = this.client.collections.get(this.documentCollectionName);
+    const collection = this.client.collections.get(this.collectionName);
     const allDocuments: Array<DocumentData & { vector: number[] }> = [];
     let cursor: string | undefined;
     const batchSize = 10000;
 
     do {
       const result = await collection.query.fetchObjects({
-        filters: collection.filter.byProperty('userId').equal(userId),
+        filters: Filters.and(
+          collection.filter.byProperty('kind').equal(this.KIND_DOCUMENT),
+          collection.filter.byProperty('userId').equal(userId),
+        ),
         limit: batchSize,
         includeVector: true,
         after: cursor,
