@@ -1,0 +1,10 @@
+node_modules
+dist
+data
+.env
+.env.*
+*.log
+.git
+.DS_Store
+embed-smoke.ts
+r2-smoke.ts

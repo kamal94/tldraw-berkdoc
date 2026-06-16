@@ -50,6 +50,12 @@ export class WeaviateService implements OnModuleInit {
       try {
         this.client = await weaviate.connectToWeaviateCloud(cloudUrl, {
           authCredentials: new weaviate.ApiKey(cloudApiKey),
+          // The default startup health-check probes gRPC synchronously, which
+          // can time out from a cold container before the first request warms
+          // the connection. Skip it (data ops still use gRPC at call time) and
+          // give the client generous timeouts for the cloud round-trip.
+          skipInitChecks: true,
+          timeout: { init: 30, query: 60, insert: 120 },
         });
         this.logger.log(`Connected to Weaviate Cloud at ${cloudUrl}`);
       } catch (error) {

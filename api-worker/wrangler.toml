@@ -1,0 +1,46 @@
+name = "berkdoc-api"
+main = "src/index.ts"
+compatibility_date = "2025-06-01"
+
+# Serve the API on the apex API hostname. Cloudflare creates the proxied DNS
+# record + route automatically (berkdoc.com is on this account).
+routes = [
+  { pattern = "api.berkdoc.com", custom_domain = true },
+]
+
+# The NestJS API runs inside a Cloudflare Container built from the backend
+# Dockerfile. This Worker is the front door: it forwards every HTTP request to
+# the container instance. Requires the Workers Paid plan (Containers are not
+# available on the free plan).
+[[containers]]
+class_name = "BerkdocApiContainer"
+image = "../backend/Dockerfile"
+max_instances = 2
+instance_type = "standard"
+
+# Container instances are managed by a Durable Object namespace.
+[[durable_objects.bindings]]
+name = "API_CONTAINER"
+class_name = "BerkdocApiContainer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["BerkdocApiContainer"]
+
+# Non-secret runtime config flips the backend adapters into cloud mode. These
+# are forwarded to the container process in src/index.ts. Secrets (API token,
+# JWT secret, Weaviate + Google creds) are provided via `wrangler secret put`
+# and injected from `this.env` -- never commit them here.
+[vars]
+DB_DRIVER = "d1"
+# Avatar blobs on Cloudflare R2 via its S3 API. R2_ACCESS_KEY_ID /
+# R2_SECRET_ACCESS_KEY are secrets; the endpoint derives from
+# CLOUDFLARE_ACCOUNT_ID.
+BLOB_DRIVER = "r2"
+R2_BUCKET = "berkdoc-blobs"
+EVENT_BUS = "cloudflare-queue"
+EMBEDDING_PROVIDER = "workers-ai"
+WEAVIATE_DRIVER = "cloud"
+CLOUDFLARE_ACCOUNT_ID = "1e035f084602025743be42aee8242a50"
+CLOUDFLARE_D1_DATABASE_ID = "26d0cdfa-cc44-4613-a8a8-2ffd992a5708"
+CLOUDFLARE_QUEUE_ID = "b25f550f640a4590925cefbf84dd0902"
