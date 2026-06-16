@@ -44,3 +44,6 @@ WEAVIATE_DRIVER = "cloud"
 CLOUDFLARE_ACCOUNT_ID = "1e035f084602025743be42aee8242a50"
 CLOUDFLARE_D1_DATABASE_ID = "26d0cdfa-cc44-4613-a8a8-2ffd992a5708"
 CLOUDFLARE_QUEUE_ID = "b25f550f640a4590925cefbf84dd0902"
+# App-notifications WebSocket (SmartExplorer) shares the container's main port
+# at this path so it is reachable through this front Worker.
+APP_WS_PATH = "/app-ws"
