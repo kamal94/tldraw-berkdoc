@@ -2,8 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { TLSocketRoom, RoomSnapshot } from '@tldraw/sync-core';
 import type { UnknownRecord } from '@tldraw/store';
 import { DatabaseService } from '../database/database.service';
-import { createTLSchema, defaultBindingSchemas, defaultShapeSchemas } from '@tldraw/tlschema';
-import { T } from '@tldraw/validate';
+import { createBerkdocTLSchema, type BerkdocTLSchema } from './berkdoc-schema';
 
 // Debounce helper
 function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T {
@@ -14,46 +13,7 @@ function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T 
   }) as T;
 }
 
-const documentShapePropsValidators = {
-	w: T.number,
-	h: T.number,
-	title: T.string,
-	url: T.string,
-	source: T.string.optional().nullable(),
-	contributors: T.arrayOf(
-		T.object({
-			name: T.string,
-			email: T.string.optional().nullable(),
-			avatarUrl: T.string.optional(),
-			color: T.string,
-		})
-	),
-	tags: T.arrayOf(T.string),
-	summary: T.string.optional(),
-} as const;
-
-const collectionShapePropsValidators = {
-	w: T.number,
-	h: T.number,
-	label: T.string,
-	documentIds: T.arrayOf(T.string),
-	color: T.string,
-	dash: T.string,
-} as const;
-
-export const schema = createTLSchema({
-	shapes: {
-		...defaultShapeSchemas,
-
-		document: {
-			props: documentShapePropsValidators,
-		},
-		collection: {
-			props: collectionShapePropsValidators,
-		},
-	},
-	bindings: defaultBindingSchemas,
-})
+export const schema: BerkdocTLSchema = createBerkdocTLSchema();
 
 @Injectable()
 export class BoardsRoomManager {
@@ -113,7 +73,7 @@ export class BoardsRoomManager {
 
     this.persistFns.set(boardId, persistSnapshot);
 
-    // Create the room (uses default tldraw schema)
+    // Create the room using the canonical BerkDoc schema.
     const room = new TLSocketRoom<UnknownRecord>({
       schema,
       initialSnapshot,

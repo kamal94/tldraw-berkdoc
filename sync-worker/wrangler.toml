@@ -1,0 +1,33 @@
+name = "berkdoc-sync"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# The canonical board schema lives in the backend package and imports
+# @tldraw/tlschema + @tldraw/validate. Force those to resolve to THIS worker's
+# single @tldraw copy so the bundle doesn't end up with two @tldraw instances
+# (which tldraw warns can cause subtle bugs).
+[alias]
+"@tldraw/tlschema" = "./node_modules/@tldraw/tlschema/dist-esm/index.mjs"
+"@tldraw/validate" = "./node_modules/@tldraw/validate/dist-esm/index.mjs"
+
+# Durable Object that hosts one tldraw TLSocketRoom per board.
+[[durable_objects.bindings]]
+name = "BOARD_ROOM"
+class_name = "BoardRoom"
+
+# SQLite-backed Durable Object namespace. The DO itself persists board
+# snapshots to D1 (not DO storage), but a SQLite-backed namespace is required to
+# run Durable Objects on the Workers free plan.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["BoardRoom"]
+
+# Shared D1 database (same as the backend) for board-access checks + snapshot persistence.
+[[d1_databases]]
+binding = "DB"
+database_name = "berkdoc"
+database_id = "26d0cdfa-cc44-4613-a8a8-2ffd992a5708"
+
+# JWT_SECRET is provided as a Worker secret in production (`wrangler secret put JWT_SECRET`).
+# For local `wrangler dev`, set it via a .dev.vars file (git-ignored) matching the backend's value.
