@@ -6,12 +6,12 @@ export interface Env {
   // Non-secret config (from wrangler.toml [vars]).
   DB_DRIVER: string;
   BLOB_DRIVER: string;
-  R2_BUCKET: string;
   EVENT_BUS: string;
   EMBEDDING_PROVIDER: string;
   WEAVIATE_DRIVER: string;
   CLOUDFLARE_ACCOUNT_ID: string;
   CLOUDFLARE_D1_DATABASE_ID: string;
+  CLOUDFLARE_QUEUE_ID: string;
 
   // Secrets (from `wrangler secret put`).
   CLOUDFLARE_API_TOKEN: string;
@@ -41,12 +41,12 @@ export class BerkdocApiContainer extends Container<Env> {
     PORT: '3000',
     DB_DRIVER: this.env.DB_DRIVER,
     BLOB_DRIVER: this.env.BLOB_DRIVER,
-    R2_BUCKET: this.env.R2_BUCKET,
     EVENT_BUS: this.env.EVENT_BUS,
     EMBEDDING_PROVIDER: this.env.EMBEDDING_PROVIDER,
     WEAVIATE_DRIVER: this.env.WEAVIATE_DRIVER,
     CLOUDFLARE_ACCOUNT_ID: this.env.CLOUDFLARE_ACCOUNT_ID,
     CLOUDFLARE_D1_DATABASE_ID: this.env.CLOUDFLARE_D1_DATABASE_ID,
+    CLOUDFLARE_QUEUE_ID: this.env.CLOUDFLARE_QUEUE_ID,
     CLOUDFLARE_API_TOKEN: this.env.CLOUDFLARE_API_TOKEN,
     JWT_SECRET: this.env.JWT_SECRET,
     WEAVIATE_CLOUD_URL: this.env.WEAVIATE_CLOUD_URL,

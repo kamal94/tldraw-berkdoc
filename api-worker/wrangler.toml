@@ -27,10 +27,12 @@ new_sqlite_classes = ["BerkdocApiContainer"]
 # and injected from `this.env` -- never commit them here.
 [vars]
 DB_DRIVER = "d1"
-BLOB_DRIVER = "r2"
-R2_BUCKET = "berkdoc-blobs"
+# Avatar blobs: D1 for now. Flip to "r2" once R2 S3 credentials
+# (R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY secrets + R2_BUCKET) are provisioned.
+BLOB_DRIVER = "database"
 EVENT_BUS = "cloudflare-queue"
 EMBEDDING_PROVIDER = "workers-ai"
 WEAVIATE_DRIVER = "cloud"
 CLOUDFLARE_ACCOUNT_ID = "1e035f084602025743be42aee8242a50"
 CLOUDFLARE_D1_DATABASE_ID = "26d0cdfa-cc44-4613-a8a8-2ffd992a5708"
+CLOUDFLARE_QUEUE_ID = "b25f550f640a4590925cefbf84dd0902"
