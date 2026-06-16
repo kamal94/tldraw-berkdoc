@@ -16,9 +16,12 @@ compatibility_flags = ["nodejs_compat"]
 name = "BOARD_ROOM"
 class_name = "BoardRoom"
 
+# SQLite-backed Durable Object namespace. The DO itself persists board
+# snapshots to D1 (not DO storage), but a SQLite-backed namespace is required to
+# run Durable Objects on the Workers free plan.
 [[migrations]]
 tag = "v1"
-new_classes = ["BoardRoom"]
+new_sqlite_classes = ["BoardRoom"]
 
 # Shared D1 database (same as the backend) for board-access checks + snapshot persistence.
 [[d1_databases]]
