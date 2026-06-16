@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { WebSocketServer, WebSocket } from 'ws';
-import type { IncomingMessage } from 'http';
+import type { IncomingMessage, Server } from 'http';
 import { AuthService } from '../auth/auth.service';
 import type { JwtPayload } from '../auth/entities/user.entity';
 import { SmartExplorerService } from './smart-explorer.service';
@@ -48,14 +48,41 @@ export class AppGateway implements OnModuleInit, OnModuleDestroy {
   }
 
   private setupWebSocketServer() {
+    // Cloud mode: attach to the main HTTP server at a path so the socket is
+    // reachable through the Container front Worker (one exposed port). The
+    // attachment happens in attachToServer(), called from bootstrap once the
+    // HTTP server exists. Local dev keeps the standalone APP_WS_PORT listener.
+    if (this.configService.get<string>('APP_WS_PATH')) {
+      return;
+    }
+
     const port = parseInt(this.configService.get<string>('APP_WS_PORT') || '3002', 10);
-
     this.wss = new WebSocketServer({ port });
-
     this.wss.on('listening', () => {
       this.logger.log(`App WebSocket server listening on port ${port}`);
     });
+    this.registerWssHandlers();
+  }
 
+  /**
+   * Cloud mode: bind the app WebSocket to the main HTTP server at APP_WS_PATH,
+   * so it shares the container's single exposed port (3000) and is reachable
+   * via the front Worker (e.g. wss://api.berkdoc.com/app-ws).
+   */
+  attachToServer(server: Server) {
+    const path = this.configService.get<string>('APP_WS_PATH');
+    if (!path || this.wss) {
+      return;
+    }
+    this.wss = new WebSocketServer({ server, path });
+    this.logger.log(`App WebSocket server attached to HTTP server at path ${path}`);
+    this.registerWssHandlers();
+  }
+
+  private registerWssHandlers() {
+    if (!this.wss) {
+      return;
+    }
     this.wss.on('connection', async (socket: WebSocket, request: IncomingMessage) => {
       try {
         await this.handleConnection(socket, request);

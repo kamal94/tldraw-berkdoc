@@ -13,6 +13,7 @@ export interface Env {
   CLOUDFLARE_D1_DATABASE_ID: string;
   CLOUDFLARE_QUEUE_ID: string;
   R2_BUCKET: string;
+  APP_WS_PATH: string;
 
   // Secrets (from `wrangler secret put`).
   CLOUDFLARE_API_TOKEN: string;
@@ -51,6 +52,7 @@ export class BerkdocApiContainer extends Container<Env> {
     CLOUDFLARE_D1_DATABASE_ID: this.env.CLOUDFLARE_D1_DATABASE_ID,
     CLOUDFLARE_QUEUE_ID: this.env.CLOUDFLARE_QUEUE_ID,
     R2_BUCKET: this.env.R2_BUCKET,
+    APP_WS_PATH: this.env.APP_WS_PATH,
     CLOUDFLARE_API_TOKEN: this.env.CLOUDFLARE_API_TOKEN,
     R2_ACCESS_KEY_ID: this.env.R2_ACCESS_KEY_ID,
     R2_SECRET_ACCESS_KEY: this.env.R2_SECRET_ACCESS_KEY,
