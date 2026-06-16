@@ -2,6 +2,12 @@ name = "berkdoc-api"
 main = "src/index.ts"
 compatibility_date = "2025-06-01"
 
+# Serve the API on the apex API hostname. Cloudflare creates the proxied DNS
+# record + route automatically (berkdoc.com is on this account).
+routes = [
+  { pattern = "api.berkdoc.com", custom_domain = true },
+]
+
 # The NestJS API runs inside a Cloudflare Container built from the backend
 # Dockerfile. This Worker is the front door: it forwards every HTTP request to
 # the container instance. Requires the Workers Paid plan (Containers are not
