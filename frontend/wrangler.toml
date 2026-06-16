@@ -1,0 +1,16 @@
+name = "berkdoc-app"
+compatibility_date = "2025-06-01"
+
+# Static SPA served via Cloudflare Workers Static Assets (no Worker script — the
+# assets are served directly from the edge). Built by `vite build` into ./dist.
+# `vite build` bakes the VITE_* values from .env.production (api.berkdoc.com etc).
+[assets]
+directory = "./dist"
+# Client-side routing (react-router): serve index.html for unknown paths.
+not_found_handling = "single-page-application"
+
+# Serve the SPA on the app hostname. Cloudflare creates the proxied DNS record +
+# edge cert automatically (berkdoc.com is on this account).
+routes = [
+  { pattern = "app.berkdoc.com", custom_domain = true },
+]
