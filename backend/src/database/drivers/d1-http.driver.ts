@@ -1,4 +1,5 @@
 import type {
+  BatchQuery,
   SqlDriver,
   SqlParams,
   SqlPrimitive,
@@ -31,6 +32,12 @@ interface D1ApiResponse {
   errors: { code: number; message: string }[];
 }
 
+interface D1BatchApiResponse {
+  result: D1QueryResult[];
+  success: boolean;
+  errors: { code: number; message: string }[];
+}
+
 /**
  * Cloudflare D1 driver that talks to the D1 REST API over HTTPS. Used when the
  * NestJS API runs in Cloudflare Containers (which cannot bind D1 natively).
@@ -39,10 +46,12 @@ interface D1ApiResponse {
  */
 export class D1HttpDriver implements SqlDriver {
   private readonly endpoint: string;
+  private readonly batchEndpoint: string;
 
   constructor(private readonly options: D1HttpDriverOptions) {
     const base = options.baseUrl ?? 'https://api.cloudflare.com/client/v4';
     this.endpoint = `${base}/accounts/${options.accountId}/d1/database/${options.databaseId}/query`;
+    this.batchEndpoint = `${base}/accounts/${options.accountId}/d1/database/${options.databaseId}/batch`;
   }
 
   private serializeParam(value: SqlPrimitive): unknown {
@@ -103,6 +112,29 @@ export class D1HttpDriver implements SqlDriver {
   async exec(sql: string): Promise<void> {
     for (const statement of splitSqlStatements(sql)) {
       await this.query(statement);
+    }
+  }
+
+  async batchRun(queries: BatchQuery[]): Promise<void> {
+    if (queries.length === 0) return;
+    const requests = queries.map((q) => ({
+      sql: q.sql,
+      params: q.params.map((p) => this.serializeParam(p)),
+    }));
+    const response = await fetch(this.batchEndpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.options.apiToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ requests }),
+    });
+    const body = (await response.json()) as D1BatchApiResponse;
+    if (!response.ok || !body.success) {
+      const message =
+        body.errors?.map((e) => `${e.code}: ${e.message}`).join('; ') ||
+        `HTTP ${response.status}`;
+      throw new Error(`D1 batch query failed: ${message}`);
     }
   }
 

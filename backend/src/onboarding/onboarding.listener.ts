@@ -61,18 +61,10 @@ export class OnboardingListener {
             event.userId,
           );
 
-          // Store each file's metadata to database (including URL and classification)
-          // File type breakdown is now computed from documents table, not stored in onboarding
-          for (const processed of result.processedFiles) {
-            await this.driveFileProcessor.storeFileMetadata(
-              event.userId,
-              processed.file,
-              processed,
-            );
-
-            // Increment scan progress counter
-            await this.databaseService.incrementMetadataFilesScanned(event.userId);
-          }
+          // Batch-write all file metadata in a single D1 round-trip and
+          // increment the scan counter once for the whole batch.
+          await this.driveFileProcessor.storeFileMetadataBatch(event.userId, result.processedFiles);
+          await this.databaseService.incrementMetadataFilesScannedBy(event.userId, result.processedFiles.length);
 
           // Aggregate results across batches
           totalSupportedFileCount += result.supportedFileCount;

@@ -155,6 +155,28 @@ export class DriveFileProcessorService {
   }
 
   /**
+   * Batch version of storeFileMetadata — writes all files in a single
+   * D1 batch API call instead of one HTTP round-trip per file.
+   */
+  async storeFileMetadataBatch(
+    userId: string,
+    processedFiles: ProcessedFileMetadata[],
+  ): Promise<void> {
+    await this.databaseService.upsertDocumentMetadataBatch(
+      processedFiles.map((p) => ({
+        userId,
+        googleFileId: p.file.id!,
+        name: p.file.name!,
+        mimeType: p.file.mimeType!,
+        classification: p.classification,
+        sizeBytes: p.sizeBytes,
+        modifiedTime: p.file.modifiedTime,
+        url: p.file.webViewLink,
+      })),
+    );
+  }
+
+  /**
    * Extract collaborator emails from file permissions
    * Used for counting unique collaborators during metadata scans
    * Note: Full collaborator details (name, avatar, role) are extracted during
