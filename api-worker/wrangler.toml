@@ -16,7 +16,7 @@ routes = [
 class_name = "BerkdocApiContainer"
 image = "../backend/Dockerfile"
 max_instances = 2
-instance_type = "standard"
+instance_type = "standard-1"
 
 # Container instances are managed by a Durable Object namespace.
 [[durable_objects.bindings]]

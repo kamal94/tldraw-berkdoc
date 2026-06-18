@@ -20,3 +20,18 @@ database_name = "berkdoc"
 # Populated by `wrangler d1 create berkdoc` when the database is provisioned.
 database_id = "26d0cdfa-cc44-4613-a8a8-2ffd992a5708"
 migrations_dir = "migrations"
+
+[observability]
+enabled = false
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = false
+persist = true
+head_sampling_rate = 1

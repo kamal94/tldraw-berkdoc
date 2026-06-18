@@ -67,6 +67,7 @@ function AuthenticatedTldraw({
       components={components}
       user={user}
       onMount={(mountedEditor) => setEditor(mountedEditor)}
+      licenseKey={import.meta.env.VITE_TLDRAW_LICENSE_KEY}
       options={{
         maxShapesPerPage: 100 * 1000,
       }}

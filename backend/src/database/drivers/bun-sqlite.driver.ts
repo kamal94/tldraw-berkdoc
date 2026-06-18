@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite';
 import * as fs from 'fs';
 import * as path from 'path';
 import type {
+  BatchQuery,
   SqlDriver,
   SqlParams,
   SqlPrimitive,
@@ -62,6 +63,16 @@ export class BunSqliteDriver implements SqlDriver {
 
   exec(sql: string): Promise<void> {
     this.db.exec(sql);
+    return Promise.resolve();
+  }
+
+  batchRun(queries: BatchQuery[]): Promise<void> {
+    const tx = this.db.transaction(() => {
+      for (const q of queries) {
+        this.db.query(q.sql).run(...(q.params as unknown as BunBindings));
+      }
+    });
+    tx();
     return Promise.resolve();
   }
 

@@ -23,6 +23,11 @@ export interface SqlRunResult {
   lastInsertRowid: number | bigint;
 }
 
+export interface BatchQuery {
+  sql: string;
+  params: SqlPrimitive[];
+}
+
 export interface SqlDriver {
   all<T = Record<string, unknown>>(
     sql: string,
@@ -36,4 +41,7 @@ export interface SqlDriver {
   // Executes one or more statements with no bound params (DDL / migrations).
   exec(sql: string): Promise<void>;
   close(): Promise<void>;
+  // Optional: send multiple statements in a single network round-trip.
+  // Falls back to sequential `run` calls if not implemented.
+  batchRun?(queries: BatchQuery[]): Promise<void>;
 }

@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { getMimeTypeDisplayName, classifyMimeType } from '../onboarding/mime-types';
 import { createSqlDriver, type SqlDriver } from './drivers';
+import type { BatchQuery, SqlPrimitive } from './drivers/sql-driver';
 import { runMigrations, resolveMigrationsDir } from './migration-runner';
 
 @Injectable()
@@ -986,6 +987,96 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     `,
       { $userId: userId, $updatedAt: now },
     );
+  }
+
+  async incrementMetadataFilesScannedBy(userId: string, count: number): Promise<void> {
+    if (count === 0) return;
+    const now = new Date().toISOString();
+    await this.driver.run(
+      'UPDATE onboarding SET metadata_files_scanned = COALESCE(metadata_files_scanned, 0) + ?, updated_at = ? WHERE user_id = ?',
+      [count, now, userId],
+    );
+  }
+
+  /**
+   * Insert/upsert a batch of metadata-only documents in a single round-trip.
+   * On conflict with an existing google_file_id, updates only metadata columns
+   * so content/tags/summary on already-processed docs are preserved.
+   *
+   * SQLite limits to 999 bound params per statement; files are chunked
+   * automatically and all chunks are sent in one D1 batch API call.
+   */
+  async upsertDocumentMetadataBatch(
+    files: Array<{
+      userId: string;
+      googleFileId: string;
+      name: string;
+      mimeType: string;
+      classification?: 'supported' | 'future' | 'ignored';
+      sizeBytes?: number;
+      modifiedTime?: string;
+      url?: string;
+    }>,
+  ): Promise<void> {
+    if (files.length === 0) return;
+
+    const now = new Date().toISOString();
+    // 14 columns per row; SQLite 999-param limit → max 71 rows; use 50 to be safe.
+    const CHUNK_SIZE = 50;
+    const queries: BatchQuery[] = [];
+
+    for (let offset = 0; offset < files.length; offset += CHUNK_SIZE) {
+      const chunk = files.slice(offset, offset + CHUNK_SIZE);
+      const rowPlaceholders = chunk.map(() => '(?,?,?,?,?,?,?,?,?,?,?,?,?,?)').join(',');
+
+      const sql = `
+        INSERT INTO documents (
+          id, title, content, url, source, user_id, google_file_id, google_modified_time,
+          mime_type, mime_type_classification, size_bytes, metadata_last_extracted,
+          created_at, updated_at
+        ) VALUES ${rowPlaceholders}
+        ON CONFLICT(google_file_id) DO UPDATE SET
+          title = excluded.title,
+          url = COALESCE(excluded.url, documents.url),
+          mime_type = COALESCE(excluded.mime_type, documents.mime_type),
+          mime_type_classification = COALESCE(excluded.mime_type_classification, documents.mime_type_classification),
+          size_bytes = COALESCE(excluded.size_bytes, documents.size_bytes),
+          google_modified_time = excluded.google_modified_time,
+          metadata_last_extracted = excluded.metadata_last_extracted,
+          updated_at = excluded.updated_at
+      `;
+
+      const params: SqlPrimitive[] = [];
+      for (let i = 0; i < chunk.length; i++) {
+        const file = chunk[i];
+        params.push(
+          `doc_${now}_${offset + i}_${Math.random().toString(36).slice(2, 7)}`,
+          file.name,
+          '',
+          file.url ?? null,
+          'google-drive',
+          file.userId,
+          file.googleFileId,
+          file.modifiedTime ?? null,
+          file.mimeType,
+          file.classification ?? null,
+          file.sizeBytes ?? null,
+          now,
+          now,
+          now,
+        );
+      }
+
+      queries.push({ sql, params });
+    }
+
+    if (this.driver.batchRun) {
+      await this.driver.batchRun(queries);
+    } else {
+      for (const q of queries) {
+        await this.driver.run(q.sql, q.params);
+      }
+    }
   }
 
   // Avatar cache operations (blob storage)
